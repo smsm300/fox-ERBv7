@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}حركات المخزون{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">سجل حركات المخزون</h1>
+        <a href="{% url 'reports:inventory' %}" class="btn btn-info text-white">
+            <i class="fas fa-chart-pie"></i> تقرير المخزون الحالي
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>النوع</th>
+                            <th>المنتج</th>
+                            <th>الكمية</th>
+                            <th>قبل</th>
+                            <th>بعد</th>
+                            <th>المصدر</th>
+                            <th>ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for movement in movements %}
+                        <tr>
+                            <td>{{ movement.movement_date }}</td>
+                            <td>
+                                {% if movement.movement_type == 'sale' %}
+                                <span class="badge bg-success">بيع</span>
+                                {% elif movement.movement_type == 'purchase' %}
+                                <span class="badge bg-primary">شراء</span>
+                                {% elif movement.movement_type == 'return_sale' %}
+                                <span class="badge bg-warning">مرتجع بيع</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ movement.movement_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ movement.product.product_name }}</td>
+                            <td class="{% if movement.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ movement.quantity }}
+                            </td>
+                            <td>{{ movement.quantity_before }}</td>
+                            <td>{{ movement.quantity_after }}</td>
+                            <td>{{ movement.reference_type }} #{{ movement.reference_id }}</td>
+                            <td>{{ movement.notes|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">لا توجد حركات مخزون مسجلة</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

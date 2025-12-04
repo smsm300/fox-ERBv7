@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}لوحة التحكم - Fox Group POS{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>مرحباً بك في نظام Fox Group POS</h2>
+        <p class="text-muted">نظام إدارة المبيعات والمخزون المتكامل</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <i class="fas fa-shopping-cart text-success"></i>
+            <h5>المبيعات اليوم</h5>
+            <h2 class="text-success">{{ sales_today|default:"0" }}</h2>
+            <small class="text-muted">فاتورة</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <i class="fas fa-users text-primary"></i>
+            <h5>العملاء</h5>
+            <h2 class="text-primary">{{ customers_count|default:"0" }}</h2>
+            <small class="text-muted">عميل نشط</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <i class="fas fa-boxes text-warning"></i>
+            <h5>المنتجات</h5>
+            <h2 class="text-warning">{{ products_count|default:"0" }}</h2>
+            <small class="text-muted">منتج متاح</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <i class="fas fa-money-bill text-info"></i>
+            <h5>رصيد الخزينة</h5>
+            <h2 class="text-info">{{ treasury_balance|default:"0" }}</h2>
+            <small class="text-muted">جنيه مصري</small>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> المبيعات الأسبوعية</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-exclamation-triangle"></i> تنبيهات المخزون</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <strong>0</strong> منتج أوشك على النفاد
+                </div>
+                <div class="alert alert-info">
+                    النظام يعمل بشكل طبيعي
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5><i class="fas fa-check-circle"></i> النظام جاهز للعمل!</h5>
+            </div>
+            <div class="card-body">
+                <p>تم إعداد النظام بنجاح. يمكنك الآن:</p>
+                <ul>
+                    <li>إضافة العملاء والموردين</li>
+                    <li>تسجيل المنتجات</li>
+                    <li>إنشاء فواتير البيع والشراء</li>
+                    <li>عرض التقارير</li>
+                </ul>
+                <a href="/admin/" class="btn btn-success">
+                    <i class="fas fa-cog"></i> الذهاب للوحة الإدارة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    const salesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'],
+            datasets: [{
+                label: 'المبيعات (جنيه)',
+                data: [0, 0, 0, 0, 0, 0, 0],
+                borderColor: '#F39C12',
+                backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

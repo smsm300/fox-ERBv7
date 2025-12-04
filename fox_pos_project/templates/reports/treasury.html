@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">{{ title }}</h1>
+        <button class="btn btn-secondary" onclick="window.print()">
+            <i class="fas fa-print"></i> طباعة
+        </button>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>طريقة الدفع</th>
+                            <th>إجمالي الإيرادات</th>
+                            <th>إجمالي المصروفات</th>
+                            <th>الرصيد الافتتاحي</th>
+                            <th>صافي الرصيد</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in treasury %}
+                        <tr>
+                            <td>{{ item.get_payment_method_display }}</td>
+                            <td class="text-success">{{ item.total_income }}</td>
+                            <td class="text-danger">{{ item.total_expense }}</td>
+                            <td class="text-info">{{ item.opening_balance }}</td>
+                            <td class="font-weight-bold">{{ item.net_balance }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center">لا توجد بيانات</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

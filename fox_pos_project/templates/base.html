@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Fox Group POS{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2C3E50;
+            --secondary-color: #E74C3C;
+            --accent-color: #F39C12;
+            --success-color: #27AE60;
+            --bg-light: #ECF0F1;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg-light);
+        }
+
+        .sidebar {
+            min-height: 100vh;
+            background-color: var(--primary-color);
+            color: white;
+            transition: all 0.3s;
+        }
+
+        .sidebar a {
+            color: white;
+            text-decoration: none;
+            padding: 15px 20px;
+            display: block;
+            transition: all 0.3s;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--accent-color);
+            padding-right: 25px;
+        }
+
+        .sidebar .nav-icon {
+            margin-left: 10px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 d-md-block sidebar" id="sidebar">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4><i class="fas fa-store"></i> Fox Group</h4>
+                        <small>نظام إدارة المبيعات</small>
+                    </div>
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a href="/" class="nav-link">
+                                <i class="fas fa-home nav-icon"></i> لوحة التحكم
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{% url 'sales:pos' %}" class="nav-link">
+                                <i class="fas fa-shopping-cart nav-icon"></i> المبيعات
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/purchases/" class="nav-link">
+                                <i class="fas fa-truck nav-icon"></i> المشتريات
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{% url 'products:list' %}" class="nav-link">
+                                <i class="fas fa-box nav-icon"></i> المنتجات
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/inventory/" class="nav-link">
+                                <i class="fas fa-boxes nav-icon"></i> المخزون
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/treasury/" class="nav-link">
+                                <i class="fas fa-money-bill nav-icon"></i> الخزينة
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{% url 'customers:list' %}" class="nav-link">
+                                <i class="fas fa-users nav-icon"></i> العملاء
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/suppliers/" class="nav-link">
+                                <i class="fas fa-industry nav-icon"></i> الموردين
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{% url 'reports:daily_sales' %}" class="nav-link">
+                                <i class="fas fa-chart-bar nav-icon"></i> التقارير
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/admin/" class="nav-link">
+                                <i class="fas fa-cog nav-icon"></i> الإدارة
+                            </a>
+                        </li>
+                        {% if user.is_authenticated %}
+                        <li class="nav-item mt-5 border-top pt-3">
+                            <form action="{% url 'users:logout' %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="nav-link btn btn-link text-white w-100 text-start">
+                                    <i class="fas fa-sign-out-alt nav-icon"></i> تسجيل الخروج
+                                </button>
+                            </form>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Content -->
+            <main class="col-md-10 ms-sm-auto px-md-4">
+                <div class="py-4">
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

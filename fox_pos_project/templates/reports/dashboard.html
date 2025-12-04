@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}التقارير{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">لوحة التقارير</h1>
+    </div>
+
+    <div class="row">
+        <!-- ملخص المبيعات -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{% url 'reports:daily_sales' %}" class="text-decoration-none">
+                <div class="card border-left-primary shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">ملخص المبيعات</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">عرض التقرير</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- المخزون -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{% url 'reports:inventory' %}" class="text-decoration-none">
+                <div class="card border-left-success shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">تقرير المخزون</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">عرض التقرير</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- الديون -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{% url 'reports:debts' %}" class="text-decoration-none">
+                <div class="card border-left-info shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">الديون المستحقة</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">عرض التقرير</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-hand-holding-usd fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- الخزينة -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{% url 'reports:treasury' %}" class="text-decoration-none">
+                <div class="card border-left-warning shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">رصيد الخزينة</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">عرض التقرير</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-wallet fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
+        <!-- الربحية -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{% url 'reports:profitability' %}" class="text-decoration-none">
+                <div class="card border-left-danger shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">تقرير الربحية</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">عرض التقرير</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

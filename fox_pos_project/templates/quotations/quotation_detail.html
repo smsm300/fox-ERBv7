@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}تفاصيل عرض سعر {{ quotation.quotation_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">تفاصيل عرض سعر #{{ quotation.quotation_number }}</h1>
+        <div>
+            <a href="{% url 'quotations:quotation_print' quotation.pk %}" class="btn btn-secondary" target="_blank">
+                <i class="fas fa-print"></i> طباعة
+            </a>
+            <a href="{% url 'quotations:quotation_list' %}" class="btn btn-primary">
+                <i class="fas fa-arrow-right"></i> العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">معلومات العرض</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>العميل:</th>
+                            <td>{{ quotation.customer.customer_name }}</td>
+                        </tr>
+                        <tr>
+                            <th>التاريخ:</th>
+                            <td>{{ quotation.quotation_date }}</td>
+                        </tr>
+                        <tr>
+                            <th>ساري حتى:</th>
+                            <td>{{ quotation.valid_until|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th>الحالة:</th>
+                            <td>
+                                {% if quotation.status == 'draft' %}
+                                <span class="badge bg-secondary">مسودة</span>
+                                {% elif quotation.status == 'sent' %}
+                                <span class="badge bg-info">مرسل</span>
+                                {% elif quotation.status == 'accepted' %}
+                                <span class="badge bg-success">مقبول</span>
+                                {% elif quotation.status == 'rejected' %}
+                                <span class="badge bg-danger">مرفوض</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>بواسطة:</th>
+                            <td>{{ quotation.created_by }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">الأصناف</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>المنتج</th>
+                                    <th>الكمية</th>
+                                    <th>السعر</th>
+                                    <th>الإجمالي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr>
+                                    <td>{{ item.product.product_name }}</td>
+                                    <td>{{ item.quantity }}</td>
+                                    <td>{{ item.unit_price }}</td>
+                                    <td>{{ item.total }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="font-weight-bold">
+                                    <td colspan="3" class="text-end">الإجمالي الكلي:</td>
+                                    <td>{{ quotation.total_amount }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

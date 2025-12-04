@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}عروض الأسعار{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">عروض الأسعار</h1>
+        <a href="{% url 'quotations:quotation_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> عرض سعر جديد
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>رقم العرض</th>
+                            <th>العميل</th>
+                            <th>التاريخ</th>
+                            <th>الإجمالي</th>
+                            <th>ساري حتى</th>
+                            <th>الحالة</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for quotation in quotations %}
+                        <tr>
+                            <td>{{ quotation.quotation_number }}</td>
+                            <td>{{ quotation.customer.customer_name }}</td>
+                            <td>{{ quotation.quotation_date }}</td>
+                            <td>{{ quotation.total_amount }}</td>
+                            <td>{{ quotation.valid_until|default:"-" }}</td>
+                            <td>
+                                {% if quotation.status == 'draft' %}
+                                <span class="badge bg-secondary">مسودة</span>
+                                {% elif quotation.status == 'sent' %}
+                                <span class="badge bg-info">مرسل</span>
+                                {% elif quotation.status == 'accepted' %}
+                                <span class="badge bg-success">مقبول</span>
+                                {% elif quotation.status == 'rejected' %}
+                                <span class="badge bg-danger">مرفوض</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'quotations:quotation_detail' quotation.pk %}" class="btn btn-sm btn-info text-white">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{% url 'quotations:quotation_print' quotation.pk %}" class="btn btn-sm btn-secondary" target="_blank">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">لا توجد عروض أسعار حالياً</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

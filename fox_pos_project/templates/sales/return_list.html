@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}مرتجعات المبيعات{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">مرتجعات المبيعات</h1>
+        <a href="{% url 'sales:return_create' %}" class="btn btn-warning">
+            <i class="fas fa-undo"></i> مرتجع جديد
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>رقم المرتجع</th>
+                            <th>التاريخ</th>
+                            <th>الفاتورة الأصلية</th>
+                            <th>العميل</th>
+                            <th>الإجمالي</th>
+                            <th>طريقة الاسترجاع</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in returns %}
+                        <tr>
+                            <td>{{ item.return_number }}</td>
+                            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+                            <td>{{ item.original_invoice.invoice_number }}</td>
+                            <td>{{ item.customer.customer_name }}</td>
+                            <td>{{ item.total_amount }}</td>
+                            <td>{{ item.get_refund_method_display }}</td>
+                            <td>
+                                {% if item.is_processed %}
+                                <span class="badge bg-success">تم التنفيذ</span>
+                                {% else %}
+                                <span class="badge bg-warning">قيد التنفيذ</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">لا توجد مرتجعات حالياً</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

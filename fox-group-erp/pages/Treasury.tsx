@@ -1,12 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, TransactionType, Customer, Supplier, AppSettings, User } from '../types';
-import { ArrowDownLeft, ArrowUpRight, Wallet, Download, Filter } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Wallet, Download, Filter, ChevronDown, ChevronUp, X } from 'lucide-react';
+
+// Sort types
+type SortField = 'id' | 'date' | 'type' | 'amount' | 'description' | 'status';
+type SortDirection = 'asc' | 'desc';
 import { ExpenseModal } from '../components/treasury/ExpenseModal';
 import { CapitalModal } from '../components/treasury/CapitalModal';
 import { TransactionsList } from '../components/treasury/TransactionsList';
 import { useTreasuryBalance } from '../hooks/useTreasuryBalance';
 import { transactionsAPI } from '../services/endpoints';
 import { handleAPIError } from '../services/errorHandler';
+import { Modal } from '../components/Modal';
 
 interface TreasuryProps {
   transactions: Transaction[];
@@ -36,9 +41,21 @@ const Treasury: React.FC<TreasuryProps> = ({
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Filter State
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Filter State - Default to last month
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    return date.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  
+  // Details Modal
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Expense Modal
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -74,12 +91,69 @@ const Treasury: React.FC<TreasuryProps> = ({
     openingBalance: settings?.openingBalance || 50000
   });
 
-  // Filter transactions
-  const filteredTransactions = transactions.filter(t => {
-    if (startDate && t.date < startDate) return false;
-    if (endDate && t.date > endDate) return false;
-    return true;
-  });
+  // Handle sort toggle
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Sort icon component
+  const SortIcon = ({ field }: { field: SortField }) => (
+    <span className="inline-flex flex-col ml-1">
+      <ChevronUp 
+        size={12} 
+        className={`-mb-1 ${sortField === field && sortDirection === 'asc' ? 'text-fox-400' : 'text-gray-600'}`} 
+      />
+      <ChevronDown 
+        size={12} 
+        className={`${sortField === field && sortDirection === 'desc' ? 'text-fox-400' : 'text-gray-600'}`} 
+      />
+    </span>
+  );
+
+  // Filter and sort transactions
+  const filteredAndSortedTransactions = useMemo(() => {
+    // First filter
+    const filtered = transactions.filter(t => {
+      const tDate = t.date.split('T')[0];
+      if (startDate && tDate < startDate) return false;
+      if (endDate && tDate > endDate) return false;
+      if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+      return true;
+    });
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'id':
+          comparison = String(a.id).localeCompare(String(b.id), 'ar');
+          break;
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case 'type':
+          comparison = a.type.localeCompare(b.type, 'ar');
+          break;
+        case 'amount':
+          comparison = Number(a.amount) - Number(b.amount);
+          break;
+        case 'description':
+          comparison = (a.description || '').localeCompare(b.description || '', 'ar');
+          break;
+        case 'status':
+          comparison = (a.status || '').localeCompare(b.status || '', 'ar');
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [transactions, startDate, endDate, typeFilter, sortField, sortDirection]);
 
   const pendingTransactions = transactions.filter(t => t.status === 'pending');
 
@@ -108,7 +182,32 @@ const Treasury: React.FC<TreasuryProps> = ({
     try {
       await transactionsAPI.return(transaction.id.toString());
       alert('تم تسجيل المرتجع وتحديث الحسابات بنجاح');
-      // Refresh transactions list if needed
+      window.location.reload();
+    } catch (err: any) {
+      alert(handleAPIError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveTransaction = async (id: string) => {
+    setLoading(true);
+    try {
+      await transactionsAPI.approve(id);
+      alert('تمت الموافقة على المعاملة بنجاح');
+      window.location.reload();
+    } catch (err: any) {
+      alert(handleAPIError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectTransaction = async (id: string) => {
+    setLoading(true);
+    try {
+      await transactionsAPI.reject(id);
+      alert('تم رفض المعاملة');
       window.location.reload();
     } catch (err: any) {
       alert(handleAPIError(err));
@@ -183,8 +282,28 @@ const Treasury: React.FC<TreasuryProps> = ({
 
       {/* Filters */}
       <div className="bg-dark-950 rounded-xl border border-dark-800 p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <Filter size={20} className="text-gray-500" />
+          
+          {/* Type Filter Dropdown */}
+          <div className="relative">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="bg-dark-900 border border-dark-700 text-white px-4 py-2 rounded-lg focus:border-fox-500 outline-none appearance-none pr-10 min-w-[150px]"
+            >
+              <option value="all">كل الأنواع</option>
+              <option value={TransactionType.SALE}>مبيعات</option>
+              <option value={TransactionType.PURCHASE}>مشتريات</option>
+              <option value={TransactionType.EXPENSE}>مصروفات</option>
+              <option value={TransactionType.RETURN}>مرتجعات</option>
+              <option value={TransactionType.CAPITAL}>رأس مال</option>
+              <option value={TransactionType.WITHDRAWAL}>سحب</option>
+              <option value={TransactionType.ADJUSTMENT}>تسوية</option>
+            </select>
+            <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+          </div>
+          
           <input
             type="date"
             value={startDate}
@@ -202,6 +321,7 @@ const Treasury: React.FC<TreasuryProps> = ({
             onClick={() => {
               setStartDate('');
               setEndDate('');
+              setTypeFilter('all');
             }}
             className="text-gray-400 hover:text-white text-sm"
           >
@@ -212,13 +332,49 @@ const Treasury: React.FC<TreasuryProps> = ({
 
       {/* Transactions List */}
       <div className="bg-dark-950 rounded-xl border border-dark-800 p-6">
-        <h2 className="text-xl font-bold text-white mb-4">سجل المعاملات</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">سجل المعاملات</h2>
+          <span className="text-sm text-gray-400">عدد النتائج: {filteredAndSortedTransactions.length}</span>
+        </div>
+        
+        {/* Sortable Table Headers */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-dark-900 text-gray-400">
+              <tr>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('id')}>
+                  <span className="flex items-center">ID <SortIcon field="id" /></span>
+                </th>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('date')}>
+                  <span className="flex items-center">التاريخ <SortIcon field="date" /></span>
+                </th>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('type')}>
+                  <span className="flex items-center">النوع <SortIcon field="type" /></span>
+                </th>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('amount')}>
+                  <span className="flex items-center">المبلغ <SortIcon field="amount" /></span>
+                </th>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('description')}>
+                  <span className="flex items-center">الوصف <SortIcon field="description" /></span>
+                </th>
+                <th className="p-3 cursor-pointer hover:text-fox-400 select-none" onClick={() => handleSort('status')}>
+                  <span className="flex items-center">الحالة <SortIcon field="status" /></span>
+                </th>
+                <th className="p-3 text-center">الإجراءات</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        
         <TransactionsList
-          transactions={filteredTransactions}
+          transactions={filteredAndSortedTransactions}
           currentUser={currentUser}
-          onViewDetails={setSelectedTransaction}
-          onApprove={onApprove}
-          onReject={onReject}
+          onViewDetails={(t) => {
+            setSelectedTransaction(t);
+            setIsDetailsModalOpen(true);
+          }}
+          onApprove={handleApproveTransaction}
+          onReject={handleRejectTransaction}
           onReturn={handleReturnTransaction}
         />
       </div>
@@ -242,6 +398,113 @@ const Treasury: React.FC<TreasuryProps> = ({
         formData={capitalForm}
         onFormChange={(field, value) => setCapitalForm(prev => ({ ...prev, [field]: value }))}
       />
+
+      {/* Transaction Details Modal */}
+      <Modal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedTransaction(null);
+        }}
+        title="تفاصيل المعاملة"
+      >
+        {selectedTransaction && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-gray-400 text-sm">رقم المعاملة</p>
+                <p className="text-white font-mono">#{selectedTransaction.id}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">التاريخ</p>
+                <p className="text-white">{new Date(selectedTransaction.date).toLocaleString('ar-EG')}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">النوع</p>
+                <p className="text-white">{
+                  selectedTransaction.type === TransactionType.SALE ? 'مبيعات' :
+                  selectedTransaction.type === TransactionType.PURCHASE ? 'مشتريات' :
+                  selectedTransaction.type === TransactionType.EXPENSE ? 'مصروف' :
+                  selectedTransaction.type === TransactionType.RETURN ? 'مرتجع' :
+                  selectedTransaction.type === TransactionType.CAPITAL ? 'رأس مال' :
+                  selectedTransaction.type === TransactionType.WITHDRAWAL ? 'سحب' :
+                  selectedTransaction.type === TransactionType.ADJUSTMENT ? 'تسوية' : selectedTransaction.type
+                }</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">المبلغ</p>
+                <p className="text-white font-bold">{selectedTransaction.amount.toLocaleString()} ج.م</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">طريقة الدفع</p>
+                <p className="text-white">{selectedTransaction.paymentMethod}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">الحالة</p>
+                <p className={`font-bold ${
+                  selectedTransaction.status === 'completed' ? 'text-emerald-400' :
+                  selectedTransaction.status === 'pending' ? 'text-yellow-400' :
+                  selectedTransaction.status === 'rejected' ? 'text-red-400' : 'text-gray-400'
+                }`}>
+                  {selectedTransaction.status === 'completed' ? 'مكتمل' :
+                   selectedTransaction.status === 'pending' ? 'معلق' :
+                   selectedTransaction.status === 'rejected' ? 'مرفوض' : selectedTransaction.status}
+                </p>
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-gray-400 text-sm">الوصف</p>
+              <p className="text-white">{selectedTransaction.description || '-'}</p>
+            </div>
+
+            {selectedTransaction.category && (
+              <div>
+                <p className="text-gray-400 text-sm">التصنيف</p>
+                <p className="text-white">{selectedTransaction.category}</p>
+              </div>
+            )}
+
+            {selectedTransaction.items && selectedTransaction.items.length > 0 && (
+              <div>
+                <p className="text-gray-400 text-sm mb-2">الأصناف</p>
+                <div className="bg-dark-900 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-dark-800 text-gray-400">
+                      <tr>
+                        <th className="p-2 text-right">الصنف</th>
+                        <th className="p-2 text-center">الكمية</th>
+                        <th className="p-2 text-left">السعر</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-700">
+                      {selectedTransaction.items.map((item, idx) => (
+                        <tr key={idx} className="text-white">
+                          <td className="p-2">{item.name}</td>
+                          <td className="p-2 text-center">{item.cartQuantity}</td>
+                          <td className="p-2 text-left">{item.sellPrice?.toLocaleString()} ج.م</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4 border-t border-dark-700">
+              <button
+                onClick={() => {
+                  setIsDetailsModalOpen(false);
+                  setSelectedTransaction(null);
+                }}
+                className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

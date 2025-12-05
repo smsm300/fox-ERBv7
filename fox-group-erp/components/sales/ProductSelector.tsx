@@ -21,12 +21,15 @@ export const ProductSelector: React.FC<ProductSelectorProps> = ({
   onAddToCart,
   searchInputRef
 }) => {
-  const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
+  // Ensure products is always an array
+  const safeProducts = Array.isArray(products) ? products : [];
   
-  const filteredProducts = products.filter(p => {
+  const categories = ['all', ...Array.from(new Set(safeProducts.map(p => p.category)))];
+  
+  const filteredProducts = safeProducts.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (p.barcode && p.barcode.includes(searchTerm));
+                         ((p as any).barcode && (p as any).barcode.includes(searchTerm));
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });

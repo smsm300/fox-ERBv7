@@ -1,9 +1,5 @@
-
-export enum ProductUnit {
-  PIECE = 'قطعة',
-  METER = 'متر',
-  BOX = 'كرتونة'
-}
+// ProductUnit is now a string to allow custom units
+export type ProductUnit = string;
 
 export enum TransactionType {
   SALE = 'بيع',
@@ -67,6 +63,8 @@ export interface Transaction {
   description: string;
   category?: string; // Expense Category (e.g. Rent, Wages)
   relatedId?: number; // Customer ID or Supplier ID
+  supplierName?: string; // Supplier name from API
+  customerName?: string; // Customer name from API
   items?: CartItem[];
   status?: 'pending' | 'completed' | 'rejected'; // Approval Workflow
   dueDate?: string; // For Deferred payments
@@ -92,12 +90,13 @@ export interface Shift {
 
 export interface Quotation {
   id: string;
+  quotation_number?: string; // From API
   date: string;
   customerId: number;
   customerName: string;
   items: CartItem[];
   totalAmount: number;
-  status: 'pending' | 'converted';
+  status: 'pending' | 'converted' | 'draft';
 }
 
 export interface KPI {
@@ -119,6 +118,8 @@ export interface AppSettings {
   currentShiftId?: number; // ID of the currently open shift
   preventNegativeStock: boolean; // Strict Mode
   invoiceTerms: string; // Footer text for invoices
+  inactivityTimeout?: number; // Auto logout timeout in minutes (default: 30)
+  logoutOnBrowserClose?: boolean; // Auto logout when browser closes (default: true)
 }
 
 export interface User {

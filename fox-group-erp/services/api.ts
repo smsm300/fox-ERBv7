@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { offlineService } from './offline';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -24,14 +25,38 @@ apiClient.interceptors.request.use(
 );
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Cache data on successful responses for offline use
+    if (response.config.method === 'get') {
+      const url = response.config.url || '';
+      
+      if (url.includes('/products')) {
+        offlineService.cacheData({ products: response.data.results || response.data });
+      } else if (url.includes('/customers')) {
+        offlineService.cacheData({ customers: response.data.results || response.data });
+      } else if (url.includes('/suppliers')) {
+        offlineService.cacheData({ suppliers: response.data.results || response.data });
+      } else if (url.includes('/settings')) {
+        offlineService.cacheData({ settings: response.data });
+      }
+    }
+    
+    return response;
+  },
   async (error) => {
+    // Handle authentication errors
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      // Reload the page to trigger re-authentication
       window.location.reload();
+      return Promise.reject(error);
     }
+
+    // Handle network errors - check if offline
+    if (!error.response && error.code === 'ERR_NETWORK') {
+      console.log('Network error detected, may be offline');
+    }
+    
     return Promise.reject(error);
   }
 );

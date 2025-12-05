@@ -25,19 +25,19 @@ export const useTreasuryBalance = ({
       switch (t.type) {
         case TransactionType.SALE:
         case TransactionType.CAPITAL:
-          currentBalance += t.amount;
+          currentBalance += Number(t.amount);
           break;
         case TransactionType.PURCHASE:
         case TransactionType.EXPENSE:
         case TransactionType.WITHDRAWAL:
-          currentBalance -= t.amount;
+          currentBalance -= Number(t.amount);
           break;
         case TransactionType.RETURN:
           const isCustomerReturn = customers.some(c => c.id === t.relatedId);
           if (isCustomerReturn) {
-            currentBalance -= t.amount;
+            currentBalance -= Number(t.amount);
           } else {
-            currentBalance += t.amount;
+            currentBalance += Number(t.amount);
           }
           break;
       }
@@ -57,19 +57,19 @@ export const useTreasuryBalance = ({
       switch (t.type) {
         case TransactionType.SALE:
         case TransactionType.CAPITAL:
-          totalIncome += t.amount;
+          totalIncome += Number(t.amount);
           break;
         case TransactionType.PURCHASE:
         case TransactionType.EXPENSE:
         case TransactionType.WITHDRAWAL:
-          totalExpenses += t.amount;
+          totalExpenses += Number(t.amount);
           break;
         case TransactionType.RETURN:
           const isCustomerReturn = customers.some(c => c.id === t.relatedId);
           if (isCustomerReturn) {
-            totalExpenses += t.amount;
+            totalExpenses += Number(t.amount);
           } else {
-            totalIncome += t.amount;
+            totalIncome += Number(t.amount);
           }
           break;
       }

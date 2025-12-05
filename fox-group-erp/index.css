@@ -1,0 +1,152 @@
+/* Fox Group ERP - Global Styles */
+
+:root {
+  /* Fox Group Brand Colors */
+  --primary-color: #0D4D4D;
+  --accent-color: #F7A400;
+  --text-light: #FFFFFF;
+  --text-dark: #333333;
+  --bg-light: #F5F5F5;
+  --bg-white: #FFFFFF;
+}
+
+/* Override Tailwind fox-500 with Fox Group colors */
+.bg-fox-500 {
+  background-color: var(--primary-color) !important;
+}
+
+.hover\:bg-fox-600:hover {
+  background-color: #0a3d3d !important;
+}
+
+.text-fox-500 {
+  color: var(--primary-color) !important;
+}
+
+.border-fox-500 {
+  border-color: var(--primary-color) !important;
+}
+
+.focus\:border-fox-500:focus {
+  border-color: var(--primary-color) !important;
+}
+
+.focus\:ring-fox-500:focus {
+  --tw-ring-color: var(--primary-color) !important;
+}
+
+/* Accent color for highlights */
+.bg-accent-500 {
+  background-color: var(--accent-color) !important;
+}
+
+.text-accent-500 {
+  color: var(--accent-color) !important;
+}
+
+/* Mobile Responsive Improvements */
+@media (max-width: 768px) {
+  /* Reduce padding on mobile */
+  .md\:p-6 {
+    padding: 1rem !important;
+  }
+  
+  .md\:p-4 {
+    padding: 0.75rem !important;
+  }
+  
+  /* Stack flex items on mobile */
+  .md\:flex-row {
+    flex-direction: column !important;
+  }
+  
+  /* Full width buttons on mobile */
+  button {
+    width: 100% !important;
+  }
+  
+  /* Smaller text on mobile */
+  .text-2xl {
+    font-size: 1.5rem !important;
+  }
+  
+  .text-xl {
+    font-size: 1.25rem !important;
+  }
+  
+  /* Hide some columns on mobile tables */
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  /* Scrollable tables on mobile */
+  .overflow-x-auto {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  /* Sidebar adjustments */
+  aside {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    height: 100vh !important;
+    z-index: 50 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s ease !important;
+  }
+  
+  aside.mobile-open {
+    transform: translateX(0) !important;
+  }
+  
+  /* Mobile menu button */
+  .mobile-menu-btn {
+    display: block !important;
+    position: fixed !important;
+    top: 1rem !important;
+    left: 1rem !important;
+    z-index: 60 !important;
+    background: var(--primary-color) !important;
+    color: white !important;
+    padding: 0.75rem !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  }
+  
+  /* Overlay for mobile menu */
+  .mobile-overlay {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    z-index: 40 !important;
+  }
+}
+
+/* Desktop - hide mobile menu button */
+@media (min-width: 769px) {
+  .mobile-menu-btn {
+    display: none !important;
+  }
+  
+  .mobile-overlay {
+    display: none !important;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  * {
+    color: black !important;
+  }
+}

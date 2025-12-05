@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Sales from './pages/Sales';
 import Purchases from './pages/Purchases';
 import Quotations from './pages/Quotations';
+import Invoices from './pages/Invoices';
 import Inventory from './pages/Inventory';
 import Treasury from './pages/Treasury';
 import Customers from './pages/Customers';
@@ -15,7 +16,9 @@ import Settings from './pages/Settings';
 import Users from './pages/Users';
 import { APP_SECTIONS, INITIAL_CUSTOMERS, INITIAL_PRODUCTS, INITIAL_SUPPLIERS, INITIAL_TRANSACTIONS, INITIAL_SETTINGS, INITIAL_USERS } from './constants';
 import { Product, Transaction, Customer, Supplier, CartItem, PaymentMethod, TransactionType, Quotation, AppSettings, User, ActivityLogEntry, Shift } from './types';
-import { authAPI } from './services/endpoints';
+import { authAPI, productsAPI, customersAPI, suppliersAPI, transactionsAPI, shiftsAPI, quotationsAPI, settingsAPI, usersAPI, activityLogAPI } from './services/endpoints';
+import { handleAPIError } from './services/errorHandler';
+import { useAutoLogout } from './hooks/useAutoLogout';
 
 // Helper to load from localStorage
 const loadState = <T,>(key: string, fallback: T): T => {
@@ -42,6 +45,44 @@ function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  
+  // Invoice Modal State
+  const [invoiceModal, setInvoiceModal] = useState<{
+    isOpen: boolean;
+    transaction: Transaction | null;
+    items: CartItem[];
+    customerName: string;
+    total: number;
+    paymentMethod: PaymentMethod;
+  }>({
+    isOpen: false,
+    transaction: null,
+    items: [],
+    customerName: '',
+    total: 0,
+    paymentMethod: PaymentMethod.CASH
+  });
+
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    sessionStorage.clear();
+    setIsAuthenticated(false);
+    logActivity('تسجيل خروج', 'خروج المستخدم من النظام');
+  };
+
+  // Auto logout hook (configurable from settings)
+  useAutoLogout({
+    onLogout: handleLogout,
+    inactivityTimeout: (settings.inactivityTimeout || 30) * 60 * 1000, // Convert minutes to milliseconds
+    logoutOnBrowserClose: settings.logoutOnBrowserClose !== false // Default true
+  });
 
   // Check authentication on mount
   useEffect(() => {
@@ -59,6 +100,64 @@ function App() {
       }
     }
   }, []);
+
+  // Fetch Data on Auth
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchInitialData();
+    }
+  }, [isAuthenticated]);
+
+  // Helper to extract list data from potentially paginated response
+  const getListData = (response: any) => {
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    if (response.data && response.data.results && Array.isArray(response.data.results)) {
+      return response.data.results;
+    }
+    return [];
+  };
+
+  const fetchInitialData = async () => {
+    try {
+      const [
+        productsRes,
+        transactionsRes,
+        customersRes,
+        suppliersRes,
+        quotationsRes,
+        settingsRes,
+        usersRes,
+        activityLogsRes,
+        shiftsRes
+      ] = await Promise.all([
+        productsAPI.list(),
+        transactionsAPI.list(),
+        customersAPI.list(),
+        suppliersAPI.list(),
+        quotationsAPI.list(),
+        settingsAPI.get(),
+        usersAPI.list(),
+        activityLogAPI.list(),
+        shiftsAPI.list()
+      ]);
+
+      setProducts(getListData(productsRes));
+      setTransactions(getListData(transactionsRes));
+      setCustomers(getListData(customersRes));
+      setSuppliers(getListData(suppliersRes));
+      setQuotations(getListData(quotationsRes));
+      if (settingsRes.data) setSettings(settingsRes.data);
+      setUsers(getListData(usersRes));
+      setActivityLogs(getListData(activityLogsRes));
+      setShifts(getListData(shiftsRes));
+
+    } catch (error: any) {
+      console.error('Error fetching initial data:', error);
+      // Don't show alert on load to avoid annoyance, just log
+    }
+  };
 
   // Save only current section to localStorage (for navigation persistence)
   useEffect(() => localStorage.setItem('fox_erp_current_section', currentSection), [currentSection]);
@@ -78,158 +177,161 @@ function App() {
 
   // --- Shift Handlers ---
 
-  const handleOpenShift = (startCash: number) => {
+  const handleOpenShift = async (startCash: number) => {
     if (settings.currentShiftId) {
       alert('هناك وردية مفتوحة بالفعل!');
       return;
     }
-    const newShift: Shift = {
-      id: Date.now(),
-      userId: currentUser.id,
-      userName: currentUser.name,
-      startTime: new Date().toISOString(),
-      startCash: startCash,
-      status: 'open'
-    };
-    setShifts(prev => [...prev, newShift]);
-    setSettings(prev => ({ ...prev, currentShiftId: newShift.id }));
-    logActivity('وردية', `فتح وردية جديدة بواسطة ${currentUser.name} برصيد ${startCash}`);
+
+    try {
+      const response = await shiftsAPI.open(startCash);
+      const newShift = response.data;
+      
+      setShifts(prev => [...prev, newShift]);
+      setSettings(prev => ({ ...prev, currentShiftId: newShift.id }));
+      
+      logActivity('وردية', `فتح وردية جديدة بواسطة ${currentUser.name} برصيد ${startCash}`);
+    } catch (error: any) {
+      console.error('Failed to open shift:', error);
+      alert('فشل فتح الوردية: ' + handleAPIError(error));
+    }
   };
 
-  const handleCloseShift = (endCash: number) => {
+  const handleCloseShift = async (endCash: number) => {
     if (!settings.currentShiftId) return;
-    
-    // Calculate expected cash
-    // Start Cash + Sales (Cash) - Returns (Cash) - Expenses (Cash)
-    const currentShift = shifts.find(s => s.id === settings.currentShiftId);
-    if (!currentShift) return;
 
-    const shiftTransactions = transactions.filter(t => 
-       t.date >= currentShift.startTime && 
-       t.status !== 'pending' && t.status !== 'rejected'
-    );
-
-    let cashMovement = 0;
-    let salesTotal = 0;
-    
-    // Detailed Breakdown
-    const salesByMethod = {
-      [PaymentMethod.CASH]: 0,
-      [PaymentMethod.WALLET]: 0,
-      [PaymentMethod.INSTAPAY]: 0,
-      [PaymentMethod.DEFERRED]: 0,
-    };
-
-    shiftTransactions.forEach(t => {
-       if (t.type === TransactionType.SALE) {
-         if (salesByMethod[t.paymentMethod] !== undefined) {
-            salesByMethod[t.paymentMethod]! += t.amount;
-         }
-         salesTotal += t.amount;
-         
-         if (t.paymentMethod === PaymentMethod.CASH) {
-           cashMovement += t.amount;
-         }
-       } else if (t.type === TransactionType.RETURN) {
-         // Determine if customer return (money out) or purchase return (money in)
-         const isCustomerReturn = customers.some(c => c.id === t.relatedId);
-         if (isCustomerReturn && t.paymentMethod === PaymentMethod.CASH) cashMovement -= t.amount;
-         else if (!isCustomerReturn && t.paymentMethod === PaymentMethod.CASH) cashMovement += t.amount;
-       } else if ((t.type === TransactionType.PURCHASE || t.type === TransactionType.EXPENSE || t.type === TransactionType.WITHDRAWAL) && t.paymentMethod === PaymentMethod.CASH) {
-         cashMovement -= t.amount;
-       } else if (t.type === TransactionType.CAPITAL && t.paymentMethod === PaymentMethod.CASH) {
-         cashMovement += t.amount;
-       }
-    });
-
-    const expectedCash = currentShift.startCash + cashMovement;
-
-    const updatedShift: Shift = {
-      ...currentShift,
-      endTime: new Date().toISOString(),
-      endCash: endCash,
-      expectedCash: expectedCash,
-      totalSales: salesTotal,
-      salesByMethod,
-      status: 'closed'
-    };
-
-    setShifts(prev => prev.map(s => s.id === settings.currentShiftId ? updatedShift : s));
-    setSettings(prev => ({ ...prev, currentShiftId: undefined }));
-    logActivity('وردية', `إغلاق الوردية. المتوقع: ${expectedCash}، الفعلي: ${endCash}`);
-    return updatedShift; // Return for printing Z-Report
+    try {
+      const response = await shiftsAPI.close(settings.currentShiftId, endCash);
+      const updatedShift = response.data;
+      
+      setShifts(prev => prev.map(s => s.id === settings.currentShiftId ? updatedShift : s));
+      setSettings(prev => ({ ...prev, currentShiftId: undefined }));
+      
+      logActivity('وردية', `إغلاق الوردية. المتوقع: ${updatedShift.expectedCash}، الفعلي: ${endCash}`);
+      return updatedShift;
+    } catch (error: any) {
+      console.error('Failed to close shift:', error);
+      alert('فشل إغلاق الوردية: ' + handleAPIError(error));
+    }
   };
 
   // --- Handlers ---
 
-  const handleSaleComplete = (cartItems: CartItem[], customerId: number, paymentMethod: PaymentMethod, totalAmount: number, invoiceId?: string, isDirectSale: boolean = false, dueDate?: string) => {
+  const handleSaleComplete = async (cartItems: CartItem[], customerId: number, paymentMethod: PaymentMethod, totalAmount: number, invoiceId?: string, isDirectSale: boolean = false, dueDate?: string) => {
     // Check if shift is open
     if (!settings.currentShiftId) {
       alert('يجب فتح الوردية (Shift) أولاً قبل إجراء أي عملية بيع.');
       return;
     }
 
-    // Determine Invoice ID: use provided one or next sequential number
-    const finalInvoiceId = invoiceId || settings.nextInvoiceNumber.toString();
-    
-    // 1. Create Sale Transaction
-    const newTransaction: Transaction = {
-      id: finalInvoiceId,
-      type: TransactionType.SALE,
-      date: new Date().toISOString(),
-      amount: totalAmount,
-      paymentMethod: paymentMethod,
-      description: isDirectSale ? `فاتورة بيع مباشر (خارجي) لعميل #${customerId}` : `فاتورة بيع لعميل #${customerId}`,
-      relatedId: customerId,
-      items: cartItems,
-      status: 'completed',
-      dueDate: paymentMethod === PaymentMethod.DEFERRED ? dueDate : undefined,
-      isDirectSale: isDirectSale, // Save flag
-      shiftId: settings.currentShiftId // Link to Shift
-    };
-    setTransactions(prev => [...prev, newTransaction]);
-
-    // 2. Handle Inventory & Expenses
-    if (isDirectSale) {
-       // Direct Sale: Do NOT reduce stock. Instead, create an Expense transaction for COGS
-       const cogs = cartItems.reduce((sum, item) => sum + (item.costPrice * item.cartQuantity), 0);
-       const expenseTransaction: Transaction = {
-          id: `EXP-DS-${finalInvoiceId}`,
-          type: TransactionType.EXPENSE,
-          date: new Date().toISOString(),
-          amount: cogs,
-          paymentMethod: PaymentMethod.CASH, // Assume we paid cash to buy these items
-          category: 'تكلفة بضاعة مباعة (Direct)',
-          description: `تكلفة تشغيل (بضاعة بيع مباشر) لفاتورة #${finalInvoiceId}`,
-          status: 'completed',
-          shiftId: settings.currentShiftId
-       };
-       setTransactions(prev => [...prev, expenseTransaction]);
-    } else {
-       // Normal Sale: Reduce Inventory
-       const updatedProducts = products.map(p => {
-        const soldItem = cartItems.find(item => item.id === p.id);
-        if (soldItem) {
-          return { ...p, quantity: Math.max(0, p.quantity - soldItem.cartQuantity) };
-        }
-        return p;
+    try {
+      // 1. Create Sale Transaction via API
+      const response = await transactionsAPI.createSale({
+        customer_id: customerId,
+        payment_method: paymentMethod,
+        items: cartItems.map(item => ({
+          id: item.id,
+          quantity: item.cartQuantity,
+          price: item.sellPrice,
+          discount: item.discount || 0
+        })),
+        total_amount: totalAmount,
+        invoice_id: invoiceId,
+        is_direct_sale: isDirectSale
       });
-      setProducts(updatedProducts);
-    }
 
-    // 3. Handle Customer Balance (Debt)
-    if (paymentMethod === PaymentMethod.DEFERRED) {
-      setCustomers(prev => prev.map(c => 
-        c.id === customerId ? { ...c, balance: c.balance - totalAmount } : c
-      ));
+      const newTransaction = response.data;
+      setTransactions(prev => [...prev, newTransaction]);
+
+      // 2. Refresh Products (to get updated stock)
+      const productsRes = await productsAPI.list();
+      setProducts(getListData(productsRes));
+
+      // 3. Refresh Customers (to get updated balance if deferred)
+      if (paymentMethod === PaymentMethod.DEFERRED) {
+        const customersRes = await customersAPI.list();
+        setCustomers(getListData(customersRes));
+      }
+
+      // 4. Update Settings (Invoice Number) if needed
+      // (API handles this usually, but we update local state to reflect changes immediately if we want)
+      // But simpler to just fetch settings or let API handle next ID.
+      // Let's refresh settings just in case
+      // const settingsRes = await settingsAPI.get();
+      // setSettings(settingsRes.data);
+      // Actually, we can manually increment locally to avoid full fetch for just ID
+      if (!invoiceId || invoiceId === settings.nextInvoiceNumber.toString()) {
+         setSettings(prev => ({...prev, nextInvoiceNumber: prev.nextInvoiceNumber + 1}));
+      }
+
+      logActivity('عملية بيع', `إضافة فاتورة بيع رقم ${newTransaction.id} بقيمة ${totalAmount}`);
+      
+      // Show Invoice Modal
+      const customer = customers.find(c => c.id === customerId);
+      setInvoiceModal({
+        isOpen: true,
+        transaction: newTransaction,
+        items: cartItems,
+        customerName: customer?.name || 'عميل نقدي',
+        total: totalAmount,
+        paymentMethod
+      });
+      
+    } catch (error: any) {
+      console.error('Sale failed:', error);
+      alert('فشل حفظ عملية البيع: ' + handleAPIError(error));
+    }
+  };
+
+  // Print Invoice from Modal
+  const handlePrintInvoice = () => {
+    const printContent = document.getElementById('invoice-print-content');
+    if (!printContent) return;
+    
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) {
+      alert('يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة');
+      return;
     }
     
-    // 4. Update Settings (Invoice Number)
-    if (!invoiceId || invoiceId === settings.nextInvoiceNumber.toString()) {
-       setSettings(prev => ({...prev, nextInvoiceNumber: prev.nextInvoiceNumber + 1}));
-    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>فاتورة</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 15px; font-size: 12px; background: white; color: black; }
+          .header { text-align: center; margin-bottom: 15px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
+          .logo { font-size: 20px; font-weight: bold; }
+          .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; }
+          table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11px; }
+          th, td { padding: 5px 3px; text-align: right; border-bottom: 1px solid #ddd; }
+          th { background: #f5f5f5; }
+          .total-section { border-top: 2px dashed #000; padding-top: 10px; margin-top: 10px; }
+          .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+          .grand-total { font-size: 16px; font-weight: bold; }
+          .footer { text-align: center; margin-top: 15px; font-size: 10px; color: #666; }
+        </style>
+      </head>
+      <body>${printContent.innerHTML}</body>
+      <script>window.onload = function() { window.print(); window.close(); }</script>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
-    logActivity('عملية بيع', `إضافة فاتورة بيع رقم ${newTransaction.id} بقيمة ${totalAmount}`);
+  // Close Invoice Modal
+  const closeInvoiceModal = () => {
+    setInvoiceModal({
+      isOpen: false,
+      transaction: null,
+      items: [],
+      customerName: '',
+      total: 0,
+      paymentMethod: PaymentMethod.CASH
+    });
   };
 
   const handlePurchaseComplete = (cartItems: CartItem[], supplierId: number, paymentMethod: PaymentMethod, totalAmount: number, dueDate?: string) => {
@@ -490,7 +592,16 @@ function App() {
       if(!window.confirm('هل تريد المتابعة رغم نقص المخزون؟ (سيصبح المخزون بالسالب)')) return;
     }
 
-    handleSaleComplete(quote.items, quote.customerId, PaymentMethod.CASH, quote.totalAmount);
+    // If customerId is 0 or not found in customers, use cash customer
+    let customerId = quote.customerId;
+    const customerExists = customers.find(c => c.id === customerId);
+    if (!customerExists || customerId === 0) {
+      // Find cash customer or use first customer
+      const cashCustomer = customers.find(c => c.name === 'عميل نقدي');
+      customerId = cashCustomer?.id || customers[0]?.id || 0;
+    }
+
+    handleSaleComplete(quote.items, customerId, PaymentMethod.CASH, quote.totalAmount);
     setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, status: 'converted' } : q));
     logActivity('تحويل عرض سعر', `تحويل العرض ${quotationId} لفاتورة`);
     alert('تم تحويل العرض لفاتورة بيع بنجاح');
@@ -670,7 +781,7 @@ function App() {
   };
 
   // Notifications
-  const lowStockProducts = products.filter(p => p.quantity <= p.minStockAlert);
+  const lowStockProducts = Array.isArray(products) ? products.filter(p => p.quantity <= p.minStockAlert) : [];
 
   const renderContent = () => {
     switch (currentSection) {
@@ -685,14 +796,14 @@ function App() {
                   onReturnTransaction={handleReturnTransaction} 
                   settings={settings} 
                   currentUser={currentUser}
-                  onOpenShift={handleOpenShift}
-                  onCloseShift={handleCloseShift}
                   onAddCustomer={handleAddCustomer}
                />;
       case APP_SECTIONS.PURCHASES:
-        return <Purchases products={products} suppliers={suppliers} transactions={transactions} onCompletePurchase={handlePurchaseComplete} onReturnTransaction={handleReturnTransaction} />;
+        return <Purchases />;
       case APP_SECTIONS.QUOTATIONS:
         return <Quotations quotations={quotations} customers={customers} products={products} onCreateQuotation={handleCreateQuotation} onConvertToInvoice={handleConvertQuoteToInvoice} settings={settings} />;
+      case APP_SECTIONS.INVOICES:
+        return <Invoices />;
       case APP_SECTIONS.INVENTORY:
         return <Inventory />;
       case APP_SECTIONS.TREASURY:
@@ -714,11 +825,11 @@ function App() {
       case APP_SECTIONS.SUPPLIERS:
         return <Suppliers />;
       case APP_SECTIONS.REPORTS:
-        return <Reports transactions={transactions} logs={activityLogs} shifts={shifts} customers={customers} suppliers={suppliers} products={products} currentUser={currentUser} settings={settings} />;
+        return <Reports />;
       case APP_SECTIONS.USERS:
-        return <Users users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />;
+        return <Users />;
       case APP_SECTIONS.SETTINGS:
-        return <Settings settings={settings} onUpdateSettings={handleUpdateSettings} onBackup={handleBackup} onRestore={handleRestore} onFactoryReset={handleFactoryReset} onClearTransactions={handleClearTransactions} />;
+        return <Settings />;
       default:
         return <Dashboard products={products} transactions={transactions} customers={customers} currentUser={currentUser} settings={settings} />;
     }
@@ -739,21 +850,114 @@ function App() {
       alertsCount={lowStockProducts.length} 
       lowStockItems={lowStockProducts}
       currentUser={currentUser}
-      onLogout={async () => {
-        try {
-          await authAPI.logout();
-        } catch (err) {
-          console.error('Logout error:', err);
-        }
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setIsAuthenticated(false);
-        logActivity('تسجيل خروج', 'خروج المستخدم من النظام');
-      }}
+      onLogout={handleLogout}
       onChangePassword={handleChangePassword}
       settings={settings}
     >
       {renderContent()}
+      
+      {/* Invoice Modal */}
+      {invoiceModal.isOpen && invoiceModal.transaction && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-auto">
+            <div id="invoice-print-content" className="p-6 text-black">
+              {/* Header */}
+              <div className="text-center mb-4 border-b-2 border-dashed border-gray-400 pb-4">
+                {settings.logoUrl && (
+                  <img src={settings.logoUrl} alt="Logo" className="h-12 mx-auto mb-2" />
+                )}
+                <h1 className="text-xl font-bold">{settings.companyName || 'Fox Group'}</h1>
+                {settings.companyAddress && <p className="text-sm text-gray-600">{settings.companyAddress}</p>}
+                {settings.companyPhone && <p className="text-sm text-gray-600">تليفون: {settings.companyPhone}</p>}
+              </div>
+              
+              {/* Info */}
+              <div className="mb-4 text-sm space-y-1">
+                <div className="flex justify-between"><span>رقم الفاتورة:</span><span>#{invoiceModal.transaction.id}</span></div>
+                <div className="flex justify-between"><span>التاريخ:</span><span>{new Date().toLocaleString('ar-EG')}</span></div>
+                <div className="flex justify-between"><span>العميل:</span><span>{invoiceModal.customerName}</span></div>
+                <div className="flex justify-between"><span>طريقة الدفع:</span><span>{invoiceModal.paymentMethod}</span></div>
+              </div>
+              
+              {/* Items Table */}
+              <table className="w-full text-sm mb-4">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-2 text-right">الصنف</th>
+                    <th className="p-2 text-center">الكمية</th>
+                    <th className="p-2 text-left">السعر</th>
+                    <th className="p-2 text-left">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceModal.items.map((item, idx) => (
+                    <tr key={idx} className="border-b">
+                      <td className="p-2">{item.name}</td>
+                      <td className="p-2 text-center">{item.cartQuantity}</td>
+                      <td className="p-2 text-left">{item.sellPrice.toLocaleString()}</td>
+                      <td className="p-2 text-left">{((item.sellPrice - (item.discount || 0)) * item.cartQuantity).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Totals */}
+              <div className="border-t-2 border-dashed border-gray-400 pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>المجموع الفرعي:</span>
+                  <span>{invoiceModal.items.reduce((s, i) => s + (i.sellPrice * i.cartQuantity), 0).toLocaleString()} ج.م</span>
+                </div>
+                {invoiceModal.items.reduce((s, i) => s + ((i.discount || 0) * i.cartQuantity), 0) > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>الخصم:</span>
+                    <span>- {invoiceModal.items.reduce((s, i) => s + ((i.discount || 0) * i.cartQuantity), 0).toLocaleString()} ج.م</span>
+                  </div>
+                )}
+                {settings.taxRate > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>ضريبة القيمة المضافة ({settings.taxRate}%):</span>
+                    <span>{(invoiceModal.total * settings.taxRate / 100).toLocaleString()} ج.م</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <span>الإجمالي:</span>
+                  <span>{(invoiceModal.total + (settings.taxRate > 0 ? invoiceModal.total * settings.taxRate / 100 : 0)).toLocaleString()} ج.م</span>
+                </div>
+              </div>
+              
+              {/* Invoice Terms */}
+              {settings.invoiceTerms && (
+                <div className="mt-4 pt-3 border-t border-dashed border-gray-300 text-xs text-gray-500">
+                  <p className="font-bold mb-1">الشروط والأحكام:</p>
+                  <p>{settings.invoiceTerms}</p>
+                </div>
+              )}
+              
+              {/* Footer */}
+              <div className="text-center mt-4 pt-4 border-t border-dashed border-gray-400 text-sm text-gray-600">
+                <p>شكراً لتعاملكم معنا</p>
+                <p>نتمنى لكم يوماً سعيداً</p>
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-3 p-4 bg-gray-100 border-t">
+              <button
+                onClick={handlePrintInvoice}
+                className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600"
+              >
+                طباعة
+              </button>
+              <button
+                onClick={closeInvoiceModal}
+                className="flex-1 bg-gray-500 text-white py-2 rounded-lg font-bold hover:bg-gray-600"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

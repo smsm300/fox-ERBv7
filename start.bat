@@ -37,11 +37,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [3/6] Loading initial data...
-python manage.py load_initial_data
-if errorlevel 1 (
-    echo [WARNING] Initial data loading failed or already exists
-)
+echo [3/6] Checking initial data...
+echo [INFO] Skipping automatic data loading. Run manually if needed:
+echo        python manage.py load_initial_data
 
 echo [4/6] Starting Django Backend on http://localhost:8000...
 start "Fox ERP Backend" cmd /k "python manage.py runserver 8000"
@@ -77,6 +75,15 @@ echo.
 echo Default Login:
 echo   Admin    - username: admin    password: admin
 echo   Cashier  - username: cashier  password: 123
+echo.
+echo ========================================
+echo IMPORTANT NOTES:
+echo ========================================
+echo - Initial demo data is NOT loaded automatically
+echo - To load demo data: python manage.py load_initial_data
+echo - To clear all data: python manage.py clear_all_data
+echo - To clear browser cache: Open http://localhost:5173/clear-storage.html
+echo ========================================
 echo.
 echo Press any key to open the application in browser...
 pause >nul

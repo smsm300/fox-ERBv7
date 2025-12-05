@@ -35,29 +35,29 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, customers
 
   const totalSales = filteredTransactions
     .filter(t => t.type === TransactionType.SALE)
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const totalSalesReturns = filteredTransactions
     .filter(t => isSalesReturn(t))
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const netRevenue = totalSales - totalSalesReturns;
   
   const totalExpenses = filteredTransactions
     .filter(t => t.type === TransactionType.EXPENSE && t.category !== 'تكلفة بضاعة مباعة (Direct)')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const calculateCOGS = () => {
     let cogs = 0;
     filteredTransactions.forEach(t => {
       if (t.type === TransactionType.SALE && t.items) {
         t.items.forEach(item => {
-          cogs += (item.costPrice * item.cartQuantity);
+          cogs += (Number(item.costPrice) * Number(item.cartQuantity));
         });
       }
       if (isSalesReturn(t) && t.items && !t.isDirectSale) {
         t.items.forEach(item => {
-          cogs -= (item.costPrice * item.cartQuantity);
+          cogs -= (Number(item.costPrice) * Number(item.cartQuantity));
         });
       }
     });
@@ -82,18 +82,18 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, customers
 
   const upcomingReceivables = upcomingDues
     .filter(t => t.type === TransactionType.SALE)
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const upcomingPayables = upcomingDues
     .filter(t => t.type === TransactionType.PURCHASE)
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const overdueInvoices = transactions.filter(t => {
      if (t.paymentMethod !== PaymentMethod.DEFERRED || !t.dueDate) return false;
      return t.dueDate < todayStr;
   });
   const overdueCount = overdueInvoices.length;
-  const overdueAmount = overdueInvoices.reduce((sum, t) => sum + t.amount, 0);
+  const overdueAmount = overdueInvoices.reduce((sum, t) => sum + Number(t.amount), 0);
 
   // Charts Data
   const getLast7DaysSales = () => {
@@ -108,7 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, customers
       
       const salesForDay = transactions
         .filter(t => t.type === TransactionType.SALE && t.date.startsWith(dateStr))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + Number(t.amount), 0);
         
       days.push({ name: dayName, sales: salesForDay });
     }
@@ -121,7 +121,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, customers
     const cats: {[key: string]: number} = {};
     products.forEach(p => {
        if (!cats[p.category]) cats[p.category] = 0;
-       cats[p.category] += (p.sellPrice * p.quantity); 
+       cats[p.category] += (Number(p.sellPrice) * Number(p.quantity)); 
     });
     return Object.keys(cats).map(key => ({ name: key, value: cats[key] }));
   };
@@ -257,7 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, customers
         <StatCard 
           title="إجمالي المنتجات" 
           value={products.length} 
-          subtext={`${products.reduce((acc, curr) => acc + curr.quantity, 0)} قطعة في المخزن`}
+          subtext={`${products.reduce((acc, curr) => acc + Number(curr.quantity), 0)} قطعة في المخزن`}
           icon={Package}
           color="bg-blue-500"
         />

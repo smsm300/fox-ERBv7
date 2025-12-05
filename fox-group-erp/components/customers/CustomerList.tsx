@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Trash2, DollarSign, User } from 'lucide-react';
+import { Edit2, Trash2, DollarSign, User, Eye, FileText } from 'lucide-react';
 import { Customer } from '../../types';
 
 interface CustomerListProps {
@@ -7,13 +7,17 @@ interface CustomerListProps {
   onEdit: (customer: Customer) => void;
   onDelete: (id: number) => void;
   onSettleDebt: (customer: Customer) => void;
+  onViewInvoices: (customer: Customer) => void;
+  onViewStatement: (customer: Customer) => void;
 }
 
 export const CustomerList: React.FC<CustomerListProps> = ({
   customers,
   onEdit,
   onDelete,
-  onSettleDebt
+  onSettleDebt,
+  onViewInvoices,
+  onViewStatement
 }) => {
   if (customers.length === 0) {
     return (
@@ -34,7 +38,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
             <th className="p-3">النوع</th>
             <th className="p-3">الرصيد</th>
             <th className="p-3">حد الائتمان</th>
-            <th className="p-3 text-center">الإجراءات</th>
+            <th className="p-3">الإجراءات</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-dark-800">
@@ -68,29 +72,47 @@ export const CustomerList: React.FC<CustomerListProps> = ({
                   {customer.type === 'business' ? `${customer.creditLimit.toLocaleString()} ج.م` : '-'}
                 </td>
                 <td className="p-3">
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-start gap-2 flex-wrap">
+                    <button
+                      onClick={() => onViewInvoices(customer)}
+                      className="flex items-center gap-1 px-2 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded text-xs"
+                      title="الفواتير"
+                    >
+                      <Eye size={14} />
+                      الفواتير
+                    </button>
                     {hasDebt && (
                       <button
                         onClick={() => onSettleDebt(customer)}
-                        className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded hover:bg-emerald-500/20"
+                        className="flex items-center gap-1 px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded text-xs"
                         title="تسوية الدين"
                       >
-                        <DollarSign size={16} />
+                        <DollarSign size={14} />
+                        تسوية
                       </button>
                     )}
                     <button
+                      onClick={() => onViewStatement(customer)}
+                      className="flex items-center gap-1 px-2 py-1 bg-dark-800 hover:bg-dark-700 text-gray-300 rounded text-xs"
+                      title="كشف حساب"
+                    >
+                      <FileText size={14} />
+                      كشف حساب
+                    </button>
+                    <button
                       onClick={() => onEdit(customer)}
-                      className="p-1.5 bg-fox-500/10 text-fox-400 rounded hover:bg-fox-500/20"
+                      className="flex items-center gap-1 px-2 py-1 bg-dark-800 hover:bg-dark-700 text-gray-300 rounded text-xs"
                       title="تعديل"
                     >
-                      <Edit2 size={16} />
+                      <Edit2 size={14} />
+                      تعديل
                     </button>
                     <button
                       onClick={() => onDelete(customer.id)}
-                      className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                      className="p-1.5 hover:bg-red-900/20 text-gray-500 hover:text-red-500 rounded"
                       title="حذف"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>

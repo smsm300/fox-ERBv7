@@ -1,0 +1,1 @@
+uid=5_0 RootWebArea "Fox Group ERP" url="http://127.0.0.1:8000/app/"

@@ -4,7 +4,9 @@ import { Lock, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
 import { INITIAL_SETTINGS } from '../constants';
 import { authAPI } from '../services/endpoints';
+import Logo from '../components/Logo';
 import { handleAPIError } from '../services/errorHandler';
+import LoadingButton from '../components/LoadingButton';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -47,22 +49,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="bg-dark-900/80 backdrop-blur-xl border border-fox-500/20 p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
         <div className="text-center mb-8">
            <div className="flex justify-center mb-6">
-              {/* Logo Container - Enhanced for Fox Group Logo */}
-              <div className="h-40 w-full flex items-center justify-center relative p-4 bg-white/5 rounded-xl border border-white/10">
-                  <img 
-                    src={settings.logoUrl} 
-                    alt="Fox Group" 
-                    className="h-full w-full object-contain drop-shadow-[0_0_15px_rgba(245,158,11,0.3)] transition-transform duration-500 hover:scale-105"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                      e.currentTarget.nextElementSibling?.classList.add('flex');
-                    }}
-                  />
-                  {/* Fallback Logo */}
-                  <div className="hidden w-24 h-24 bg-gradient-to-br from-fox-600 to-fox-500 items-center justify-center rounded-xl shadow-inner mx-auto">
-                     <span className="text-5xl font-bold text-white">F</span>
-                  </div>
+              <div className="h-40 w-full flex items-center justify-center relative p-4 rounded-xl">
+                <Logo src={settings.logoUrl} height={160} />
               </div>
            </div>
            <h1 className="text-3xl font-bold text-white mb-2 tracking-wider neon-text uppercase font-sans">FOX GROUP</h1>
@@ -103,17 +91,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
           )}
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-fox-600 to-fox-500 hover:from-fox-500 hover:to-fox-400 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-fox-500/30 transition-all transform hover:scale-[1.02] active:scale-[0.98] mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          <LoadingButton
+            type="submit"
+            isLoading={loading}
+            loadingText="جاري تسجيل الدخول..."
+            className="w-full bg-gradient-to-r from-fox-600 to-fox-500 hover:from-fox-500 hover:to-fox-400 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-fox-500/30 transition-all transform hover:scale-[1.02] active:scale-[0.98] mt-4"
           >
-            {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
-          </button>
+            تسجيل الدخول
+          </LoadingButton>
         </form>
         
         <div className="mt-8 text-center border-t border-dark-800 pt-4">
-          <p className="text-xs text-gray-500">Fox Group ERP v1.0.0 &copy; 2024</p>
+          <p className="text-xs text-gray-500">Fox Group ERP v1.0.0 &copy; 2025</p>
+          <p className="text-xs text-gray-400 mt-1">تم التطوير بواسطة <span className="text-accent-500 font-semibold">CairoCode</span></p>
         </div>
       </div>
     </div>

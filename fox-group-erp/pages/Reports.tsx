@@ -43,12 +43,19 @@ const Reports: React.FC = () => {
         productsAPI.list()
       ]);
       
-      setTransactions(Array.isArray(transactionsRes.data) ? transactionsRes.data : []);
-      setLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
-      setShifts(Array.isArray(shiftsRes.data) ? shiftsRes.data : []);
-      setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
-      setSuppliers(Array.isArray(suppliersRes.data) ? suppliersRes.data : []);
-      setProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
+      // Handle paginated responses (results array) or direct arrays
+      const extractData = (res: any) => {
+        if (Array.isArray(res.data)) return res.data;
+        if (res.data?.results && Array.isArray(res.data.results)) return res.data.results;
+        return [];
+      };
+      
+      setTransactions(extractData(transactionsRes));
+      setLogs(extractData(logsRes));
+      setShifts(extractData(shiftsRes));
+      setCustomers(extractData(customersRes));
+      setSuppliers(extractData(suppliersRes));
+      setProducts(extractData(productsRes));
     } catch (err: any) {
       alert(handleAPIError(err));
       // Set empty arrays on error
@@ -67,16 +74,32 @@ const Reports: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
 
-  // Filter transactions by date
-  const filteredTransactions = transactions.filter(t => {
-    const tDate = t.date.split('T')[0];
-    return tDate >= startDate && tDate <= endDate;
-  });
-
-  // Get all calculated data from custom hook
-  const reportsData = useReportsData({
+  // Destructure Data
+  const {
+    chartData,
+    totalSales,
+    totalReturns,
+    netSales,
+    totalExpenses,
+    expenseBreakdown,
+    cogs,
+    grossProfit,
+    netIncome,
+    customersWithDebt,
+    totalReceivables,
+    suppliersWithCredit,
+    totalPayables,
+    totalInventoryCost,
+    totalInventoryValue,
+    potentialProfit,
+    topSelling,
+    topCustomers,
+    overdueInvoices,
+    totalCapital,
+    totalWithdrawals
+  } = useReportsData({
     transactions,
-    filteredTransactions,
+    filteredTransactions: transactions,
     customers,
     suppliers,
     products
@@ -86,7 +109,7 @@ const Reports: React.FC = () => {
     const headers = ['ID', 'التاريخ', 'النوع', 'المبلغ', 'الوصف', 'طريقة الدفع'];
     const csvContent = [
       headers.join(','),
-      ...filteredTransactions.map(t => [
+      ...transactions.map(t => [
         t.id, t.date, t.type, t.amount, `"${t.description}"`, t.paymentMethod
       ].join(','))
     ].join('\n');
@@ -199,43 +222,45 @@ const Reports: React.FC = () => {
         {/* Render Active Tab Content */}
         {activeTab === 'sales' && (
           <SalesReport
-            netSales={reportsData.netSales}
-            totalReturns={reportsData.totalReturns}
-            filteredTransactions={filteredTransactions}
-            chartData={reportsData.chartData}
-            topCustomers={reportsData.topCustomers}
+            netSales={netSales}
+            totalReturns={totalReturns}
+            filteredTransactions={transactions}
+            chartData={chartData}
+            topCustomers={topCustomers}
           />
         )}
 
         {activeTab === 'inventory' && (
           <InventoryReport
-            totalInventoryCost={reportsData.totalInventoryCost}
-            totalInventoryValue={reportsData.totalInventoryValue}
-            potentialProfit={reportsData.potentialProfit}
-            topSelling={reportsData.topSelling}
+            totalInventoryCost={totalInventoryCost}
+            totalInventoryValue={totalInventoryValue}
+            potentialProfit={potentialProfit}
+            topSelling={topSelling}
             products={products}
           />
         )}
 
         {activeTab === 'financial' && (
           <FinancialReport
-            netIncome={reportsData.netIncome}
-            totalSales={reportsData.totalSales}
-            totalReturns={reportsData.totalReturns}
-            cogs={reportsData.cogs}
-            grossProfit={reportsData.grossProfit}
-            expenseBreakdown={reportsData.expenseBreakdown}
+            netIncome={netIncome}
+            totalSales={totalSales}
+            totalReturns={totalReturns}
+            cogs={cogs}
+            grossProfit={grossProfit}
+            expenseBreakdown={expenseBreakdown}
+            totalCapital={totalCapital}
+            totalWithdrawals={totalWithdrawals}
           />
         )}
 
         {activeTab === 'debts' && (
           <DebtsReport
-            customersWithDebt={reportsData.customersWithDebt}
-            totalReceivables={reportsData.totalReceivables}
-            suppliersWithCredit={reportsData.suppliersWithCredit}
-            totalPayables={reportsData.totalPayables}
-            topSuppliers={reportsData.topSuppliers}
-            overdueInvoices={reportsData.overdueInvoices}
+            customersWithDebt={customersWithDebt}
+            totalReceivables={totalReceivables}
+            suppliersWithCredit={suppliersWithCredit}
+            totalPayables={totalPayables}
+            topSuppliers={[]}
+            overdueInvoices={overdueInvoices}
           />
         )}
 

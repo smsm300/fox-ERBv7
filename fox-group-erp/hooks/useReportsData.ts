@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Transaction, TransactionType, Customer, Supplier, Product } from '../types';
+import { Transaction, TransactionType, Customer, Supplier, Product, PaymentMethod } from '../types';
 
 interface UseReportsDataProps {
   transactions: Transaction[];
@@ -27,9 +27,9 @@ export const useReportsData = ({
     filteredTransactions.forEach(t => {
       const date = new Date(t.date).toLocaleDateString('ar-EG');
       if (!data[date]) data[date] = { date, sales: 0, expenses: 0, purchases: 0 };
-      if (t.type === TransactionType.SALE) data[date].sales += t.amount;
-      if (t.type === TransactionType.EXPENSE) data[date].expenses += t.amount;
-      if (t.type === TransactionType.PURCHASE) data[date].purchases += t.amount;
+      if (t.type === TransactionType.SALE) data[date].sales += Number(t.amount);
+      if (t.type === TransactionType.EXPENSE) data[date].expenses += Number(t.amount);
+      if (t.type === TransactionType.PURCHASE) data[date].purchases += Number(t.amount);
     });
     return Object.values(data);
   };
@@ -37,24 +37,24 @@ export const useReportsData = ({
   // Sales Calculations
   const totalSales = filteredTransactions
     .filter(t => t.type === TransactionType.SALE)
-    .reduce((a, b) => a + b.amount, 0);
+    .reduce((a, b) => a + Number(b.amount), 0);
     
   const totalReturns = filteredTransactions
     .filter(t => isSalesReturn(t))
-    .reduce((a, b) => a + b.amount, 0);
+    .reduce((a, b) => a + Number(b.amount), 0);
     
   const netSales = totalSales - totalReturns;
 
   // Expenses Calculations
   const totalExpenses = filteredTransactions
     .filter(t => t.type === TransactionType.EXPENSE && t.category !== 'تكلفة بضاعة مباعة (Direct)')
-    .reduce((a, b) => a + b.amount, 0);
+    .reduce((a, b) => a + Number(b.amount), 0);
 
   const expenseBreakdown = filteredTransactions
     .filter(t => t.type === TransactionType.EXPENSE)
     .reduce((acc, curr) => {
       const cat = curr.category || 'غير مصنف';
-      acc[cat] = (acc[cat] || 0) + curr.amount;
+      acc[cat] = (acc[cat] || 0) + Number(curr.amount);
       return acc;
     }, {} as {[key: string]: number});
 
@@ -62,10 +62,10 @@ export const useReportsData = ({
   let cogs = 0;
   filteredTransactions.forEach(t => {
     if (t.type === TransactionType.SALE && t.items) {
-      t.items.forEach(item => cogs += (item.costPrice * item.cartQuantity));
+      t.items.forEach(item => cogs += (Number(item.costPrice) * Number(item.cartQuantity)));
     }
     if (isSalesReturn(t) && t.items) {
-      t.items.forEach(item => cogs -= (item.costPrice * item.cartQuantity));
+      t.items.forEach(item => cogs -= (Number(item.costPrice) * Number(item.cartQuantity)));
     }
   });
 
@@ -73,15 +73,15 @@ export const useReportsData = ({
   const netIncome = grossProfit - totalExpenses;
 
   // Debts Calculations
-  const customersWithDebt = customers.filter(c => c.balance < 0);
-  const totalReceivables = customersWithDebt.reduce((acc, c) => acc + Math.abs(c.balance), 0);
+  const customersWithDebt = customers.filter(c => Number(c.balance) < 0);
+  const totalReceivables = customersWithDebt.reduce((acc, c) => acc + Math.abs(Number(c.balance)), 0);
 
-  const suppliersWithCredit = suppliers.filter(s => s.balance > 0);
-  const totalPayables = suppliersWithCredit.reduce((acc, s) => acc + s.balance, 0);
+  const suppliersWithCredit = suppliers.filter(s => Number(s.balance) > 0);
+  const totalPayables = suppliersWithCredit.reduce((acc, s) => acc + Number(s.balance), 0);
 
   // Inventory Analysis
-  const totalInventoryCost = products.reduce((acc, p) => acc + (p.quantity * p.costPrice), 0);
-  const totalInventoryValue = products.reduce((acc, p) => acc + (p.quantity * p.sellPrice), 0);
+  const totalInventoryCost = products.reduce((acc, p) => acc + (Number(p.quantity) * Number(p.costPrice)), 0);
+  const totalInventoryValue = products.reduce((acc, p) => acc + (Number(p.quantity) * Number(p.sellPrice)), 0);
   const potentialProfit = totalInventoryValue - totalInventoryCost;
 
   // Top Selling Products
@@ -92,8 +92,8 @@ export const useReportsData = ({
       if (t.type === TransactionType.SALE && t.items) {
         t.items.forEach(item => {
           if (!productSales[item.id]) productSales[item.id] = { name: item.name, qty: 0, revenue: 0 };
-          productSales[item.id].qty += item.cartQuantity;
-          productSales[item.id].revenue += (item.cartQuantity * item.sellPrice);
+          productSales[item.id].qty += Number(item.cartQuantity);
+          productSales[item.id].revenue += (Number(item.cartQuantity) * Number(item.sellPrice));
         });
       }
     });
@@ -107,7 +107,7 @@ export const useReportsData = ({
   const topCustomers = useMemo(() => {
     const custMap: {[id: number]: number} = {};
     transactions.filter(t => t.type === TransactionType.SALE).forEach(t => {
-      if(t.relatedId) custMap[t.relatedId] = (custMap[t.relatedId] || 0) + t.amount;
+      if(t.relatedId) custMap[t.relatedId] = (custMap[t.relatedId] || 0) + Number(t.amount);
     });
     return Object.entries(custMap)
       .map(([id, amount]) => ({
@@ -122,7 +122,7 @@ export const useReportsData = ({
   const topSuppliers = useMemo(() => {
     const suppMap: {[id: number]: number} = {};
     transactions.filter(t => t.type === TransactionType.PURCHASE).forEach(t => {
-      if(t.relatedId) suppMap[t.relatedId] = (suppMap[t.relatedId] || 0) + t.amount;
+      if(t.relatedId) suppMap[t.relatedId] = (suppMap[t.relatedId] || 0) + Number(t.amount);
     });
     return Object.entries(suppMap)
       .map(([id, amount]) => ({
@@ -137,7 +137,7 @@ export const useReportsData = ({
   const getOverdueInvoices = () => {
     const today = new Date().toISOString().split('T')[0];
     return transactions.filter(t => 
-      t.paymentMethod === 'deferred' && 
+      t.paymentMethod === PaymentMethod.DEFERRED && 
       t.dueDate && 
       t.dueDate < today
     ).map(t => {
@@ -148,6 +148,15 @@ export const useReportsData = ({
       return { ...t, relatedName, isSale };
     });
   };
+
+  // Treasury Calculations (Cash Flow)
+  const totalCapital = filteredTransactions
+    .filter(t => t.type === TransactionType.CAPITAL)
+    .reduce((a, b) => a + Number(b.amount), 0);
+
+  const totalWithdrawals = filteredTransactions
+    .filter(t => t.type === TransactionType.WITHDRAWAL)
+    .reduce((a, b) => a + Number(b.amount), 0);
 
   return {
     // Chart Data
@@ -182,6 +191,10 @@ export const useReportsData = ({
     // Top Lists
     topSelling,
     topCustomers,
-    topSuppliers
+    topSuppliers,
+
+    // Treasury
+    totalCapital,
+    totalWithdrawals
   };
 };

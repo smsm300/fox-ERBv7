@@ -42,20 +42,40 @@ class PurchaseService:
         # 3. Get current shift (optional for purchases)
         open_shift = Shift.objects.filter(status='open').first()
         
-        # 4. Create transaction record
+        # 4. Enrich cart items with product names before saving
+        enriched_items = []
+        for item in cart_items:
+            product_id = item.get('id')
+            try:
+                product = Product.objects.get(product_id=product_id)
+                enriched_items.append({
+                    'id': product_id,
+                    'name': product.product_name,
+                    'quantity': item.get('quantity', 0),
+                    'cost_price': float(item.get('cost_price', 0)),
+                })
+            except Product.DoesNotExist:
+                enriched_items.append({
+                    'id': product_id,
+                    'name': f'منتج #{product_id}',
+                    'quantity': item.get('quantity', 0),
+                    'cost_price': float(item.get('cost_price', 0)),
+                })
+        
+        # 5. Create transaction record with enriched items
         purchase_transaction = Transaction.objects.create(
             transaction_id=transaction_id,
             type='شراء',
             amount=total_amount,
             payment_method=payment_method,
-            items=cart_items,
+            items=enriched_items,
             related_supplier=supplier,
             shift=open_shift,
             created_by=user,
             status='completed'
         )
         
-        # 5. Update product quantities and calculate average cost
+        # 6. Update product quantities and calculate average cost
         for item in cart_items:
             try:
                 product = Product.objects.get(product_id=item['id'])

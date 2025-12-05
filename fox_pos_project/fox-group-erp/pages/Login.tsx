@@ -110,7 +110,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
         </form>
         
         <div className="mt-8 text-center border-t border-dark-800 pt-4">
-          <p className="text-xs text-gray-500">Fox Group ERP v1.0.0 &copy; 2024</p>
+          <p className="text-xs text-gray-500">Fox Group ERP v1.0.0 &copy; 2025</p>
         </div>
       </div>
     </div>

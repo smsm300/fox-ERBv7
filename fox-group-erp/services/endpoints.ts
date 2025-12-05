@@ -14,8 +14,32 @@ import type {
 } from '../types';
 
 export const productsAPI = {
-  list: (params?: { category?: string; search?: string }) =>
-    apiClient.get<Product[]>('/products/', { params }),
+  list: async (params?: { category?: string; search?: string }) => {
+    const { offlineService } = await import('./offline');
+    
+    // If offline, return cached data
+    if (!offlineService.getNetworkStatus()) {
+      const cached = offlineService.getCachedData();
+      let products = cached.products;
+      
+      // Apply filters if provided
+      if (params?.category) {
+        products = products.filter(p => p.category === params.category);
+      }
+      if (params?.search) {
+        const search = params.search.toLowerCase();
+        products = products.filter(p => 
+          p.name.toLowerCase().includes(search) ||
+          p.sku?.toLowerCase().includes(search) ||
+          p.barcode?.toLowerCase().includes(search)
+        );
+      }
+      
+      return { data: products };
+    }
+    
+    return apiClient.get<Product[]>('/products/', { params });
+  },
   
   create: (data: Omit<Product, 'id'>) =>
     apiClient.post<Product>('/products/', data),
@@ -23,16 +47,33 @@ export const productsAPI = {
   update: (id: number, data: Partial<Product>) =>
     apiClient.put<Product>(`/products/${id}/`, data),
   
-  delete: (id: number) =>
-    apiClient.delete(`/products/${id}/`),
+  delete: async (id: number) => {
+    const { offlineService } = await import('./offline');
+    
+    // Prevent delete when offline
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن حذف المنتجات في وضع عدم الاتصال');
+    }
+    
+    return apiClient.delete(`/products/${id}/`);
+  },
   
   adjustStock: (id: number, data: { quantity_diff: number; reason: string }) =>
     apiClient.post(`/products/${id}/adjust_stock/`, data),
 };
 
 export const customersAPI = {
-  list: () =>
-    apiClient.get<Customer[]>('/customers/'),
+  list: async () => {
+    const { offlineService } = await import('./offline');
+    
+    // If offline, return cached data
+    if (!offlineService.getNetworkStatus()) {
+      const cached = offlineService.getCachedData();
+      return { data: cached.customers };
+    }
+    
+    return apiClient.get<Customer[]>('/customers/');
+  },
   
   create: (data: Omit<Customer, 'id' | 'balance'>) =>
     apiClient.post<Customer>('/customers/', data),
@@ -40,16 +81,41 @@ export const customersAPI = {
   update: (id: number, data: Partial<Customer>) =>
     apiClient.put<Customer>(`/customers/${id}/`, data),
   
-  delete: (id: number) =>
-    apiClient.delete(`/customers/${id}/`),
+  delete: async (id: number) => {
+    const { offlineService } = await import('./offline');
+    
+    // Prevent delete when offline
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن حذف العملاء في وضع عدم الاتصال');
+    }
+    
+    return apiClient.delete(`/customers/${id}/`);
+  },
   
-  settleDebt: (id: number, data: { amount: number; payment_method: PaymentMethod }) =>
-    apiClient.post(`/customers/${id}/settle_debt/`, data),
+  settleDebt: async (id: number, data: { amount: number; payment_method: PaymentMethod }) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('debt_settlement', { entityType: 'customer', entityId: id, ...data });
+      return { data: { success: true, message: 'تم إضافة العملية للمزامنة' } };
+    }
+    
+    return apiClient.post(`/customers/${id}/settle_debt/`, data);
+  },
 };
 
 export const suppliersAPI = {
-  list: () =>
-    apiClient.get<Supplier[]>('/suppliers/'),
+  list: async () => {
+    const { offlineService } = await import('./offline');
+    
+    // If offline, return cached data
+    if (!offlineService.getNetworkStatus()) {
+      const cached = offlineService.getCachedData();
+      return { data: cached.suppliers };
+    }
+    
+    return apiClient.get<Supplier[]>('/suppliers/');
+  },
   
   create: (data: Omit<Supplier, 'id' | 'balance'>) =>
     apiClient.post<Supplier>('/suppliers/', data),
@@ -57,11 +123,27 @@ export const suppliersAPI = {
   update: (id: number, data: Partial<Supplier>) =>
     apiClient.put<Supplier>(`/suppliers/${id}/`, data),
   
-  delete: (id: number) =>
-    apiClient.delete(`/suppliers/${id}/`),
+  delete: async (id: number) => {
+    const { offlineService } = await import('./offline');
+    
+    // Prevent delete when offline
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن حذف الموردين في وضع عدم الاتصال');
+    }
+    
+    return apiClient.delete(`/suppliers/${id}/`);
+  },
   
-  settleDebt: (id: number, data: { amount: number; payment_method: PaymentMethod }) =>
-    apiClient.post(`/suppliers/${id}/settle_debt/`, data),
+  settleDebt: async (id: number, data: { amount: number; payment_method: PaymentMethod }) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('debt_settlement', { entityType: 'supplier', entityId: id, ...data });
+      return { data: { success: true, message: 'تم إضافة العملية للمزامنة' } };
+    }
+    
+    return apiClient.post(`/suppliers/${id}/settle_debt/`, data);
+  },
 };
 
 interface SaleRequest {
@@ -118,20 +200,99 @@ export const transactionsAPI = {
   }) =>
     apiClient.get<Transaction[]>('/transactions/', { params }),
   
-  createSale: (data: SaleRequest) =>
-    apiClient.post<Transaction>('/transactions/create_sale/', data),
+  createSale: async (data: SaleRequest) => {
+    const { offlineService } = await import('./offline');
+    
+    // Check if online
+    if (!offlineService.getNetworkStatus()) {
+      // Queue for offline sync
+      offlineService.addToQueue('sale', data);
+      
+      // Return a mock response for UI
+      return {
+        data: {
+          id: `offline_${Date.now()}`,
+          type: 'sale',
+          status: 'pending_sync',
+          ...data,
+        } as Transaction
+      };
+    }
+    
+    return apiClient.post<Transaction>('/transactions/create_sale/', data);
+  },
   
-  createPurchase: (data: PurchaseRequest) =>
-    apiClient.post<Transaction>('/transactions/create_purchase/', data),
+  createPurchase: async (data: PurchaseRequest) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('purchase', data);
+      return {
+        data: {
+          id: `offline_${Date.now()}`,
+          type: 'purchase',
+          status: 'pending_sync',
+          ...data,
+        } as Transaction
+      };
+    }
+    
+    return apiClient.post<Transaction>('/transactions/create_purchase/', data);
+  },
   
-  createExpense: (data: ExpenseRequest) =>
-    apiClient.post<Transaction>('/transactions/create_expense/', data),
+  createExpense: async (data: ExpenseRequest) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('expense', data);
+      return {
+        data: {
+          id: `offline_${Date.now()}`,
+          type: 'expense',
+          status: 'pending_sync',
+          ...data,
+        } as Transaction
+      };
+    }
+    
+    return apiClient.post<Transaction>('/transactions/create_expense/', data);
+  },
   
-  createCapital: (data: CapitalRequest) =>
-    apiClient.post<Transaction>('/transactions/create_capital/', data),
+  createCapital: async (data: CapitalRequest) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('capital', data);
+      return {
+        data: {
+          id: `offline_${Date.now()}`,
+          type: 'capital',
+          status: 'pending_sync',
+          ...data,
+        } as Transaction
+      };
+    }
+    
+    return apiClient.post<Transaction>('/transactions/create_capital/', data);
+  },
   
-  createWithdrawal: (data: WithdrawalRequest) =>
-    apiClient.post<Transaction>('/transactions/create_withdrawal/', data),
+  createWithdrawal: async (data: WithdrawalRequest) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      offlineService.addToQueue('withdrawal', data);
+      return {
+        data: {
+          id: `offline_${Date.now()}`,
+          type: 'withdrawal',
+          status: 'pending_sync',
+          ...data,
+        } as Transaction
+      };
+    }
+    
+    return apiClient.post<Transaction>('/transactions/create_withdrawal/', data);
+  },
   
   approve: (id: string) =>
     apiClient.put(`/transactions/${id}/approve/`),
@@ -189,11 +350,25 @@ export const usersAPI = {
   list: () =>
     apiClient.get<User[]>('/users/'),
   
-  create: (data: { username: string; password: string; name: string; role: string }) =>
-    apiClient.post<User>('/users/', data),
+  create: async (data: { username: string; password: string; name: string; role: string }) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن إضافة مستخدمين في وضع عدم الاتصال');
+    }
+    
+    return apiClient.post<User>('/users/', data);
+  },
   
-  delete: (id: number) =>
-    apiClient.delete(`/users/${id}/`),
+  delete: async (id: number) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن حذف مستخدمين في وضع عدم الاتصال');
+    }
+    
+    return apiClient.delete(`/users/${id}/`);
+  },
   
   changePassword: (data: { old_password: string; new_password: string }) =>
     apiClient.put('/users/me/change_password/', data),
@@ -227,10 +402,23 @@ export const reportsAPI = {
 };
 
 export const systemAPI = {
-  backup: () =>
-    apiClient.post('/system/backup/', {}, { responseType: 'blob' }),
+  backup: async () => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن إنشاء نسخة احتياطية في وضع عدم الاتصال');
+    }
+    
+    return apiClient.post('/system/backup/', {}, { responseType: 'blob' });
+  },
   
-  restore: (file: File) => {
+  restore: async (file: File) => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن استعادة النسخة الاحتياطية في وضع عدم الاتصال');
+    }
+    
     const formData = new FormData();
     formData.append('file', file);
     return apiClient.post('/system/restore/', formData, {
@@ -240,11 +428,25 @@ export const systemAPI = {
     });
   },
   
-  clearTransactions: () =>
-    apiClient.post('/system/clear_transactions/'),
+  clearTransactions: async () => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن مسح المعاملات في وضع عدم الاتصال');
+    }
+    
+    return apiClient.post('/system/clear_transactions/');
+  },
   
-  factoryReset: () =>
-    apiClient.post('/system/factory_reset/'),
+  factoryReset: async () => {
+    const { offlineService } = await import('./offline');
+    
+    if (!offlineService.getNetworkStatus()) {
+      throw new Error('لا يمكن إعادة ضبط المصنع في وضع عدم الاتصال');
+    }
+    
+    return apiClient.post('/system/factory_reset/');
+  },
 };
 
 export const authAPI = {

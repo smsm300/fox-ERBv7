@@ -10,6 +10,7 @@ from .models import Shift, Transaction, AppSettings, ActivityLog
 class TransactionSerializer(serializers.ModelSerializer):
     """Serializer for Transaction model"""
     id = serializers.CharField(source='transaction_id', read_only=True)
+    relatedId = serializers.SerializerMethodField()
     relatedCustomer = serializers.PrimaryKeyRelatedField(
         source='related_customer', 
         queryset=Customer.objects.all(), 
@@ -22,19 +23,77 @@ class TransactionSerializer(serializers.ModelSerializer):
         required=False, 
         allow_null=True
     )
+    supplierName = serializers.SerializerMethodField()
+    customerName = serializers.SerializerMethodField()
     paymentMethod = serializers.CharField(source='payment_method', max_length=50)
     dueDate = serializers.DateField(source='due_date', required=False, allow_null=True)
     isDirectSale = serializers.BooleanField(source='is_direct_sale', default=False)
     createdBy = serializers.PrimaryKeyRelatedField(source='created_by', read_only=True)
+    items = serializers.SerializerMethodField()
     
     class Meta:
         model = Transaction
         fields = [
             'id', 'type', 'date', 'amount', 'paymentMethod', 'description', 
-            'category', 'relatedCustomer', 'relatedSupplier', 'items', 
+            'category', 'relatedId', 'relatedCustomer', 'relatedSupplier', 
+            'supplierName', 'customerName', 'items', 
             'status', 'dueDate', 'isDirectSale', 'shift', 'createdBy'
         ]
         read_only_fields = ['id', 'date', 'createdBy']
+    
+    def get_relatedId(self, obj):
+        """Get related customer or supplier ID"""
+        if obj.related_customer:
+            return obj.related_customer.customer_id
+        if obj.related_supplier:
+            return obj.related_supplier.supplier_id
+        return None
+    
+    def get_supplierName(self, obj):
+        """Get supplier name if exists"""
+        if obj.related_supplier:
+            return obj.related_supplier.supplier_name
+        return None
+    
+    def get_customerName(self, obj):
+        """Get customer name if exists"""
+        if obj.related_customer:
+            return obj.related_customer.customer_name
+        return None
+    
+    def get_items(self, obj):
+        """Get items with product names"""
+        if not obj.items or not isinstance(obj.items, list):
+            return []
+        
+        # Enrich items with product names
+        enriched_items = []
+        for item in obj.items:
+            if not isinstance(item, dict):
+                continue
+            
+            product_id = item.get('id')
+            # Get name from item if already enriched, otherwise fetch from DB
+            item_name = item.get('name')
+            
+            if not item_name and product_id:
+                try:
+                    product = Product.objects.get(product_id=product_id)
+                    item_name = product.product_name
+                except Product.DoesNotExist:
+                    item_name = f'منتج #{product_id}'
+            
+            enriched_item = {
+                'id': product_id,
+                'name': item_name or f'منتج #{product_id}',
+                'cartQuantity': item.get('quantity', item.get('cartQuantity', 0)),
+                'costPrice': float(item.get('cost_price', item.get('costPrice', 0))),
+                'sellPrice': float(item.get('price', item.get('sellPrice', 0))),
+                'discount': float(item.get('discount', 0))
+            }
+            enriched_items.append(enriched_item)
+        
+        return enriched_items
 
 
 class ShiftSerializer(serializers.ModelSerializer):

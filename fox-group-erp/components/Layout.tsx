@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -17,11 +17,17 @@ import {
   AlertTriangle,
   UserCog,
   Lock,
-  Key
+  Key,
+  Wifi,
+  WifiOff,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
 import { APP_SECTIONS } from '../constants';
 import { Product, User, AppSettings } from '../types';
 import { Modal } from './Modal';
+import Logo from './Logo';
+import { offlineService } from '../services/offline';
 
 interface LayoutProps {
   currentSection: string;
@@ -53,6 +59,33 @@ const Layout: React.FC<LayoutProps> = ({
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
+  // Network Status
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    // Setup network listener
+    const handleNetworkChange = (online: boolean) => {
+      setIsOnline(online);
+      if (online) {
+        // Update pending count after sync
+        setTimeout(() => {
+          setPendingCount(offlineService.getPendingCount());
+        }, 1000);
+      }
+    };
+
+    offlineService.addNetworkListener(handleNetworkChange);
+    
+    // Initial status
+    setIsOnline(offlineService.getNetworkStatus());
+    setPendingCount(offlineService.getPendingCount());
+
+    return () => {
+      offlineService.removeNetworkListener(handleNetworkChange);
+    };
+  }, []);
+
   // Full Menu
   const allMenuItems = [
     { id: APP_SECTIONS.DASHBOARD, label: 'الرئيسية', icon: LayoutDashboard, roles: ['admin', 'accountant', 'cashier', 'stock_keeper'] },
@@ -60,6 +93,7 @@ const Layout: React.FC<LayoutProps> = ({
     { id: APP_SECTIONS.PURCHASES, label: 'المشتريات', icon: ShoppingBag, roles: ['admin', 'accountant', 'stock_keeper'] },
     { id: APP_SECTIONS.INVENTORY, label: 'المخزون', icon: Package, roles: ['admin', 'stock_keeper'] },
     { id: APP_SECTIONS.QUOTATIONS, label: 'عروض الأسعار', icon: ClipboardList, roles: ['admin', 'cashier'] },
+    { id: APP_SECTIONS.INVOICES, label: 'الفواتير', icon: FileText, roles: ['admin', 'accountant', 'cashier'] },
     { id: APP_SECTIONS.CUSTOMERS, label: 'العملاء', icon: Users, roles: ['admin', 'accountant', 'cashier'] },
     { id: APP_SECTIONS.SUPPLIERS, label: 'الموردين', icon: Truck, roles: ['admin', 'accountant'] },
     { id: APP_SECTIONS.TREASURY, label: 'الخزينة', icon: Wallet, roles: ['admin', 'accountant'] },
@@ -94,28 +128,7 @@ const Layout: React.FC<LayoutProps> = ({
         <div className="h-24 flex items-center justify-center border-b border-dark-800 relative bg-black/40">
           {isSidebarOpen ? (
              <div className="flex flex-col items-center justify-center w-full px-4 h-full py-2">
-                {settings?.logoUrl ? (
-                  <div className="h-full w-full flex items-center justify-center">
-                    <img 
-                      src={settings.logoUrl} 
-                      alt="Fox Group" 
-                      className="h-16 w-auto max-w-full object-contain drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" 
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        e.currentTarget.nextElementSibling?.classList.add('flex');
-                      }}
-                    />
-                    {/* Fallback Text if Image Fails */}
-                    <div className="hidden flex-col items-center">
-                        <h1 className="font-bold text-2xl text-fox-500 neon-text tracking-widest uppercase">FOX GROUP</h1>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                      <h1 className="font-bold text-2xl text-fox-500 neon-text tracking-widest uppercase">FOX GROUP</h1>
-                  </div>
-                )}
+               <Logo src={settings?.logoUrl} height={64} />
              </div>
           ) : (
              <div className="w-10 h-10 rounded-xl bg-fox-500 flex items-center justify-center neon-border shadow-lg shadow-fox-500/30">
@@ -178,10 +191,34 @@ const Layout: React.FC<LayoutProps> = ({
         {/* Header */}
         <header className="h-16 bg-dark-950/80 backdrop-blur-md border-b border-dark-800 flex items-center justify-between px-6 z-10">
           <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-2">
+            <Logo src={settings?.logoUrl} height={24} className="hidden sm:block" />
             <span className="w-2 h-6 bg-fox-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)]"></span>
             {menuItems.find(i => i.id === currentSection)?.label}
           </h2>
           <div className="flex items-center gap-4">
+            {/* Network Status Indicator */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              isOnline 
+                ? 'bg-green-900/30 text-green-400 border border-green-700/30' 
+                : 'bg-red-900/30 text-red-400 border border-red-700/30 animate-pulse'
+            }`}>
+              {isOnline ? (
+                <>
+                  <Wifi size={14} />
+                  <span>متصل</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={14} />
+                  <span>غير متصل</span>
+                  {pendingCount > 0 && (
+                    <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px]">
+                      {pendingCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
             {/* Notifications */}
             <div className="relative">
               <button 
@@ -241,9 +278,13 @@ const Layout: React.FC<LayoutProps> = ({
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-6 relative custom-scrollbar">
+        <div className="flex-1 overflow-auto p-4 pb-14 relative custom-scrollbar">
           {children}
         </div>
+
+        <footer className="h-10 bg-dark-950/80 border-t border-dark-800 flex items-center justify-center px-6 flex-shrink-0">
+          <span className="text-xs text-gray-400">تم التطوير بواسطة <span className="text-accent-500 font-semibold">CairoCode</span></span>
+        </footer>
 
         {/* Change Password Modal */}
         <Modal 

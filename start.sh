@@ -29,29 +29,65 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-echo "[1/6] Checking PostgreSQL connection..."
+echo "[1/7] Setting up Python virtual environment..."
 cd fox_pos_project
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}[ERROR] Failed to create virtual environment${NC}"
+        cd ..
+        exit 1
+    fi
+fi
+
+# Activate virtual environment
+echo "Activating virtual environment..."
+source venv/bin/activate
+
+echo "[2/7] Installing Python dependencies..."
+if [ ! -f "venv/.installed" ]; then
+    echo "Installing requirements..."
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}[ERROR] Failed to install requirements${NC}"
+        deactivate
+        cd ..
+        exit 1
+    fi
+    touch venv/.installed
+else
+    echo "Dependencies already installed"
+fi
+
+echo "[3/7] Checking PostgreSQL connection..."
 python3 -c "import psycopg2; conn = psycopg2.connect(dbname='fox_db', user='fox_admin', password='Ebnb@t0t@', host='localhost', port='5444'); print('PostgreSQL connected successfully'); conn.close()" 2>/dev/null
 if [ $? -ne 0 ]; then
     echo -e "${YELLOW}[WARNING] PostgreSQL connection failed. Make sure PostgreSQL is running on port 5444${NC}"
     echo ""
 fi
 
-echo "[2/6] Running Django migrations..."
+echo "[4/7] Running Django migrations..."
 python3 manage.py migrate
 if [ $? -ne 0 ]; then
     echo -e "${RED}[ERROR] Migration failed${NC}"
+    deactivate
     cd ..
     exit 1
 fi
 
-echo "[3/6] Loading initial data..."
-python3 manage.py load_initial_data
-if [ $? -ne 0 ]; then
-    echo -e "${YELLOW}[WARNING] Initial data loading failed or already exists${NC}"
+echo "[5/7] Creating superuser (if needed)..."
+echo "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@fox.com', 'admin')" | python3 manage.py shell 2>/dev/null
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Admin user ready (username: admin, password: admin)${NC}"
+else
+    echo -e "${YELLOW}[INFO] Admin user may already exist${NC}"
 fi
 
-echo "[4/6] Starting Django Backend on http://localhost:8000..."
+echo "[6/7] Starting Django Backend on http://localhost:8000..."
 python3 manage.py runserver 8000 > ../backend.log 2>&1 &
 BACKEND_PID=$!
 echo "Backend PID: $BACKEND_PID"
@@ -59,7 +95,7 @@ sleep 5
 
 cd ..
 
-echo "[5/6] Installing Frontend dependencies (if needed)..."
+echo "[7/7] Installing Frontend dependencies (if needed)..."
 cd fox-group-erp
 if [ ! -d "node_modules" ]; then
     echo "Installing npm packages..."
@@ -70,9 +106,11 @@ if [ ! -d "node_modules" ]; then
         cd ..
         exit 1
     fi
+else
+    echo "Dependencies already installed"
 fi
 
-echo "[6/6] Starting React Frontend on http://localhost:5173..."
+echo "Starting React Frontend on http://localhost:5173..."
 npm run dev > ../frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend PID: $FRONTEND_PID"

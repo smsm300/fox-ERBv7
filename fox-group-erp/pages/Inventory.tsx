@@ -55,7 +55,9 @@ const Inventory: React.FC = () => {
     image: ''
   });
 
-  const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
+  const categories = ['all', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))];
+  const existingCategories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+  const existingUnits = Array.from(new Set(products.map(p => p.unit).filter(Boolean)));
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -227,6 +229,8 @@ const Inventory: React.FC = () => {
         editingProduct={editingProduct}
         formData={formData}
         onFormChange={handleFormChange}
+        existingCategories={existingCategories}
+        existingUnits={existingUnits}
       />
 
       {/* Stock Adjustment Modal */}

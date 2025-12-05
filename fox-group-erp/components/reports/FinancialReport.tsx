@@ -8,6 +8,8 @@ interface FinancialReportProps {
   cogs: number;
   grossProfit: number;
   expenseBreakdown: {[key: string]: number};
+  totalCapital: number;
+  totalWithdrawals: number;
 }
 
 const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#06b6d4', '#8b5cf6'];
@@ -18,7 +20,9 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({
   totalReturns,
   cogs,
   grossProfit,
-  expenseBreakdown
+  expenseBreakdown,
+  totalCapital,
+  totalWithdrawals
 }) => {
   const expensePieData = Object.keys(expenseBreakdown).map(key => ({ 
     name: key, 
@@ -103,6 +107,22 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({
           <div className="mt-2 pt-2 border-t border-dark-800 flex justify-between font-bold text-sm text-red-400">
             <span>إجمالي المصروفات</span>
             <span>{Object.values(expenseBreakdown).reduce((a: number, b: number)=>a+b, 0).toLocaleString()}</span>
+          </div>
+        </div>
+        
+        <div className="border border-dark-800 rounded-lg p-4 col-span-1 md:col-span-2">
+          <h4 className="text-gray-400 text-sm border-b border-dark-800 pb-2 mb-2">
+            ملخص حركة الخزينة (رأس المال والمسحوبات)
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+             <div className="bg-dark-900 p-3 rounded">
+                <p className="text-xs text-gray-500 mb-1">إيداع رأس مال (Capital In)</p>
+                <p className="text-lg font-bold text-emerald-400">{totalCapital.toLocaleString()}</p>
+             </div>
+             <div className="bg-dark-900 p-3 rounded">
+                <p className="text-xs text-gray-500 mb-1">مسحوبات شخصية (Withdrawals)</p>
+                <p className="text-lg font-bold text-orange-400">{totalWithdrawals.toLocaleString()}</p>
+             </div>
           </div>
         </div>
       </div>

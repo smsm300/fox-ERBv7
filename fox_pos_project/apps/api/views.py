@@ -62,9 +62,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
         to_date = self.request.query_params.get('to_date')
         
         if from_date:
-            queryset = queryset.filter(date__gte=from_date)
+            queryset = queryset.filter(date__date__gte=from_date)
         if to_date:
-            queryset = queryset.filter(date__lte=to_date)
+            queryset = queryset.filter(date__date__lte=to_date)
         
         return queryset
     
@@ -154,7 +154,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
         """
         from .services.sale_service import SaleService
         
-        cart_items = request.data.get('cart_items', [])
+        # Support both 'items' and 'cart_items' for backwards compatibility
+        cart_items = request.data.get('items', request.data.get('cart_items', []))
         customer_id = request.data.get('customer_id')
         payment_method = request.data.get('payment_method')
         total_amount = request.data.get('total_amount')
@@ -208,7 +209,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         Create a purchase transaction using PurchaseService
         POST /api/transactions/create_purchase/
         Body: {
-            "cart_items": [...],
+            "items": [...],  # or "cart_items": [...]
             "supplier_id": 1,
             "payment_method": "كاش",
             "total_amount": 1000
@@ -216,7 +217,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
         """
         from .services.purchase_service import PurchaseService
         
-        cart_items = request.data.get('cart_items', [])
+        # Accept both 'items' and 'cart_items' for compatibility
+        cart_items = request.data.get('items', request.data.get('cart_items', []))
         supplier_id = request.data.get('supplier_id')
         payment_method = request.data.get('payment_method')
         total_amount = request.data.get('total_amount')
@@ -509,32 +511,41 @@ class SupplierViewSet(viewsets.ModelViewSet):
         POST /api/suppliers/{id}/settle_debt/
         Body: { "amount": 1000, "payment_method": "كاش" }
         """
-        supplier = self.get_object()
-        amount = request.data.get('amount')
-        payment_method = request.data.get('payment_method', 'كاش')
-        
-        if amount is None:
-            return Response(
-                {'error_code': 'VALIDATION_ERROR', 'message': 'amount مطلوب'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        from decimal import Decimal
         
         try:
-            amount = float(amount)
-        except ValueError:
+            supplier = self.get_object()
+            amount = request.data.get('amount')
+            payment_method = request.data.get('payment_method', 'كاش')
+            
+            if amount is None:
+                return Response(
+                    {'error_code': 'VALIDATION_ERROR', 'message': 'amount مطلوب'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                amount = Decimal(str(amount))
+            except:
+                return Response(
+                    {'error_code': 'VALIDATION_ERROR', 'message': 'amount يجب أن يكون رقم'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update supplier balance (decrease = payment made to supplier)
+            supplier.current_balance -= amount
+            supplier.save()
+            
+            serializer = self.get_serializer(supplier)
+            return Response(serializer.data)
+        except Exception as e:
+            import traceback
+            print(f"Error in settle_debt: {e}")
+            print(traceback.format_exc())
             return Response(
-                {'error_code': 'VALIDATION_ERROR', 'message': 'amount يجب أن يكون رقم'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error_code': 'SERVER_ERROR', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        # Update supplier balance (decrease = payment made)
-        supplier.current_balance -= amount
-        supplier.save()
-        
-        # TODO: Create settlement transaction when Transaction model is implemented
-        
-        serializer = self.get_serializer(supplier)
-        return Response(serializer.data)
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -579,32 +590,41 @@ class CustomerViewSet(viewsets.ModelViewSet):
         POST /api/customers/{id}/settle_debt/
         Body: { "amount": 1000, "payment_method": "كاش" }
         """
-        customer = self.get_object()
-        amount = request.data.get('amount')
-        payment_method = request.data.get('payment_method', 'كاش')
-        
-        if amount is None:
-            return Response(
-                {'error_code': 'VALIDATION_ERROR', 'message': 'amount مطلوب'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        from decimal import Decimal
         
         try:
-            amount = float(amount)
-        except ValueError:
+            customer = self.get_object()
+            amount = request.data.get('amount')
+            payment_method = request.data.get('payment_method', 'كاش')
+            
+            if amount is None:
+                return Response(
+                    {'error_code': 'VALIDATION_ERROR', 'message': 'amount مطلوب'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                amount = Decimal(str(amount))
+            except:
+                return Response(
+                    {'error_code': 'VALIDATION_ERROR', 'message': 'amount يجب أن يكون رقم'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update customer balance (increase = payment received)
+            customer.current_balance += amount
+            customer.save()
+            
+            serializer = self.get_serializer(customer)
+            return Response(serializer.data)
+        except Exception as e:
+            import traceback
+            print(f"Error in settle_debt: {e}")
+            print(traceback.format_exc())
             return Response(
-                {'error_code': 'VALIDATION_ERROR', 'message': 'amount يجب أن يكون رقم'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error_code': 'SERVER_ERROR', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        # Update customer balance (increase = payment received)
-        customer.current_balance += amount
-        customer.save()
-        
-        # TODO: Create settlement transaction when Transaction model is implemented
-        
-        serializer = self.get_serializer(customer)
-        return Response(serializer.data)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -998,6 +1018,7 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['date']
     ordering = ['-date']
     pagination_class = StandardResultsSetPagination
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """Filter activity logs by date range if provided"""
@@ -1006,9 +1027,9 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         to_date = self.request.query_params.get('to_date')
         
         if from_date:
-            queryset = queryset.filter(date__gte=from_date)
+            queryset = queryset.filter(date__date__gte=from_date)
         if to_date:
-            queryset = queryset.filter(date__lte=to_date)
+            queryset = queryset.filter(date__date__lte=to_date)
         
         return queryset
 
@@ -1038,9 +1059,9 @@ class ReportsViewSet(viewsets.ViewSet):
         sales = Transaction.objects.filter(type='بيع')
         
         if from_date:
-            sales = sales.filter(date__gte=from_date)
+            sales = sales.filter(date__date__gte=from_date)
         if to_date:
-            sales = sales.filter(date__lte=to_date)
+            sales = sales.filter(date__date__lte=to_date)
         
         # Calculate totals by payment method
         totals_by_method = {}
@@ -1480,12 +1501,13 @@ class SystemViewSet(viewsets.ViewSet):
             Customer.objects.all().delete()
             Supplier.objects.all().delete()
             
-            # Reset settings
+            # Reset settings (keep logo_url to preserve branding)
             settings = AppSettings.get_settings()
             settings.company_name = 'FOX GROUP'
             settings.company_phone = ''
             settings.company_address = ''
-            settings.logo_url = None
+            # Keep logo_url - don't reset it to preserve company branding
+            # settings.logo_url = None  # Commented out to keep logo
             settings.auto_print = False
             settings.next_invoice_number = 1001
             settings.opening_balance = 0

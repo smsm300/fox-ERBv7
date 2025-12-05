@@ -63,17 +63,6 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-right text-sm">
-        <thead className="bg-dark-900 text-gray-400">
-          <tr>
-            <th className="p-3">ID</th>
-            <th className="p-3">التاريخ</th>
-            <th className="p-3">النوع</th>
-            <th className="p-3">المبلغ</th>
-            <th className="p-3">الوصف</th>
-            <th className="p-3">الحالة</th>
-            <th className="p-3 text-center">الإجراءات</th>
-          </tr>
-        </thead>
         <tbody className="divide-y divide-dark-800">
           {transactions.map(transaction => (
             <tr key={transaction.id} className="hover:bg-dark-900/50 text-gray-300">

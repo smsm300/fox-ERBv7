@@ -77,7 +77,8 @@ class SaleService:
             for item in cart_items:
                 try:
                     product = Product.objects.get(product_id=item['id'])
-                    if product.current_stock < Decimal(str(item['quantity'])):
+                    qty = item.get('quantity', item.get('cartQuantity', 0))
+                    if product.current_stock < Decimal(str(qty)):
                         raise BusinessRuleViolation(
                             f'الكمية غير متوفرة للمنتج: {product.product_name}',
                             error_code='INSUFFICIENT_STOCK'
@@ -101,13 +102,30 @@ class SaleService:
         if not invoice_id:
             invoice_id = f"INV-{uuid.uuid4().hex[:12].upper()}"
         
-        # 7. Create transaction record
+        # 7. Enrich items with product names for storage
+        enriched_items = []
+        for item in cart_items:
+            try:
+                product = Product.objects.get(product_id=item['id'])
+                enriched_items.append({
+                    'id': item['id'],
+                    'name': product.product_name,
+                    'quantity': item.get('quantity', item.get('cartQuantity', 0)),
+                    'price': float(item.get('price', item.get('sellPrice', 0))),
+                    'costPrice': float(product.purchase_price),
+                    'sellPrice': float(product.selling_price),
+                    'discount': float(item.get('discount', 0))
+                })
+            except Product.DoesNotExist:
+                enriched_items.append(item)
+        
+        # 8. Create transaction record
         sale_transaction = Transaction.objects.create(
             transaction_id=invoice_id,
             type='بيع',
             amount=total_amount,
             payment_method=payment_method,
-            items=cart_items,
+            items=enriched_items,
             related_customer=customer,
             is_direct_sale=is_direct_sale,
             shift=open_shift,
@@ -115,14 +133,15 @@ class SaleService:
             status='completed'
         )
         
-        # 8. Update product quantities (if not direct sale)
+        # 9. Update product quantities (if not direct sale)
         if not is_direct_sale:
             for item in cart_items:
                 product = Product.objects.get(product_id=item['id'])
-                product.current_stock -= Decimal(str(item['quantity']))
+                qty = item.get('quantity', item.get('cartQuantity', 0))
+                product.current_stock -= Decimal(str(qty))
                 product.save()
         
-        # 9. Create expense for COGS (if direct sale)
+        # 10. Create expense for COGS (if direct sale)
         if is_direct_sale:
             # Calculate cost of goods sold
             cogs = sum(Decimal(str(item.get('cost', 0))) * Decimal(str(item['quantity'])) 
@@ -140,13 +159,13 @@ class SaleService:
                 status='completed'
             )
         
-        # 10. Update customer balance (if deferred)
+        # 11. Update customer balance (if deferred)
         if payment_method == 'آجل' and customer:
             customer.current_balance -= Decimal(str(total_amount))
             customer.save()
         
-        # 11. TODO: Increment invoice number in settings
-        # 12. TODO: Log activity
+        # 12. TODO: Increment invoice number in settings
+        # 13. TODO: Log activity
         
         return sale_transaction
     

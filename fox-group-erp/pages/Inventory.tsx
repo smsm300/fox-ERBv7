@@ -102,22 +102,18 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
     setLoading(true);
     try {
       if (editingProduct) {
-        const response = await productsAPI.update(editingProduct.id, data);
-        console.log('✏️ Update Response:', response);
+        await productsAPI.update(editingProduct.id, data);
         alert('تم تحديث المنتج بنجاح');
       } else {
-        const response = await productsAPI.create(data);
-        console.log('➕ Create Response:', response);
+        await productsAPI.create(data);
         alert('تم إضافة المنتج بنجاح');
       }
       setIsFormOpen(false);
-      console.log('🔄 Fetching products after save...');
       await fetchProducts();
       // Notify parent to refresh products in other pages
       onProductsChange?.();
-      console.log('✅ Products fetched, count:', products.length);
     } catch (err: any) {
-      console.error('❌ Error in handleSubmit:', err);
+      console.error('Error in handleSubmit:', err);
       alert(handleAPIError(err));
     } finally {
       setLoading(false);
@@ -125,10 +121,8 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
   };
 
   const handleFormChange = (field: keyof Omit<Product, 'id'>, value: any) => {
-    console.log('📝 Form change:', field, '=', value);
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
-      console.log('📝 New formData:', newData);
       return newData;
     });
   };

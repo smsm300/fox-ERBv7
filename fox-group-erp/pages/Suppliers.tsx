@@ -1,22 +1,25 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Truck, Phone, FileText, Edit2, Trash2, Printer, X, DollarSign, Eye } from 'lucide-react';
-import { Supplier, Transaction, TransactionType, AppSettings, PaymentMethod } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Search, Plus, Truck, FileText, Edit2, Trash2, Printer, X, DollarSign, Eye, RefreshCw } from 'lucide-react';
+import { Supplier, Transaction, TransactionType, PaymentMethod } from '../types';
 import { Modal } from '../components/Modal';
-import { suppliersAPI, transactionsAPI, settingsAPI } from '../services/endpoints';
-import { handleAPIError } from '../services/errorHandler';
 import { useDebounce } from '../hooks/useDebounce';
+import {
+  useSuppliers,
+  useCreateSupplier,
+  useUpdateSupplier,
+  useDeleteSupplier,
+  useSettleSupplierDebt
+} from '../hooks/useSuppliers';
+import { useTransactions } from '../hooks/useTransactions';
+import { useSettings } from '../hooks/useSettings';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { showToast } from '../components/ui/Toast';
 
 interface SuppliersProps {
   onDataChange?: () => void;
 }
 
 const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStatementSupplier, setSelectedStatementSupplier] = useState<Supplier | null>(null);
@@ -33,46 +36,17 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
   // Invoices Modal State
   const [invoicesSupplier, setInvoicesSupplier] = useState<Supplier | null>(null);
 
-  useEffect(() => {
-    fetchSuppliers();
-    fetchTransactions();
-    fetchSettings();
-  }, []);
+  // React Query hooks
+  const { data: suppliers = [], isLoading, refetch, isFetching } = useSuppliers();
+  const { data: transactions = [] } = useTransactions();
+  const { data: settings } = useSettings();
 
-  const fetchSettings = async () => {
-    try {
-      const response = await settingsAPI.get();
-      setSettings(response.data);
-    } catch (err: any) {
-      console.error('Failed to fetch settings:', err);
-    }
-  };
+  const createSupplier = useCreateSupplier();
+  const updateSupplier = useUpdateSupplier();
+  const deleteSupplier = useDeleteSupplier();
+  const settleDebt = useSettleSupplierDebt();
 
-  const fetchTransactions = async () => {
-    try {
-      const response = await transactionsAPI.list();
-      const transactionsData = (response.data as any).results || response.data;
-      setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
-    } catch (err: any) {
-      console.error('Failed to fetch transactions:', err);
-      setTransactions([]);
-    }
-  };
-
-  const fetchSuppliers = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await suppliersAPI.list();
-      const suppliersData = (response.data as any).results || response.data;
-      setSuppliers(Array.isArray(suppliersData) ? suppliersData : []);
-    } catch (err: any) {
-      setError(handleAPIError(err));
-      setSuppliers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { confirm } = useConfirm();
 
   // Debounced search term for performance
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -95,39 +69,34 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
     try {
       if (editingSupplier) {
-        await suppliersAPI.update(editingSupplier.id, formData);
-        alert('تم تحديث المورد بنجاح');
+        await updateSupplier.mutateAsync({ id: editingSupplier.id, data: formData });
       } else {
-        await suppliersAPI.create(formData);
-        alert('تم إضافة المورد بنجاح');
+        await createSupplier.mutateAsync(formData);
       }
       setIsModalOpen(false);
-      await fetchSuppliers();
       onDataChange?.();
-    } catch (err: any) {
-      setError(handleAPIError(err));
-      alert(handleAPIError(err));
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      // Error handled by mutation
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا المورد؟')) {
-      setLoading(true);
+    const confirmed = await confirm({
+      title: 'حذف المورد',
+      message: 'هل أنت متأكد من حذف هذا المورد؟ سيتم حذف جميع بياناته.',
+      confirmText: 'حذف',
+      cancelText: 'إلغاء',
+      type: 'danger'
+    });
+
+    if (confirmed) {
       try {
-        await suppliersAPI.delete(id);
-        alert('تم حذف المورد بنجاح');
-        await fetchSuppliers();
+        await deleteSupplier.mutateAsync(id);
         onDataChange?.();
-      } catch (err: any) {
-        alert(handleAPIError(err));
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        // Error handled by mutation
       }
     }
   };
@@ -138,19 +107,19 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
 
     const amount = Number(settlementAmount);
     if (amount <= 0) {
-      alert('يرجى إدخال مبلغ صحيح');
+      showToast.warning('يرجى إدخال مبلغ صحيح');
       return;
     }
 
     try {
-      await suppliersAPI.settleDebt(settlementSupplier.id, { amount, payment_method: settlementMethod });
-      alert('تم تسجيل السداد بنجاح');
+      await settleDebt.mutateAsync({
+        id: settlementSupplier.id,
+        data: { amount, payment_method: settlementMethod }
+      });
       setSettlementSupplier(null);
       setSettlementAmount('');
-      await fetchSuppliers();
-      await fetchTransactions();
-    } catch (err: any) {
-      alert(handleAPIError(err));
+    } catch (err) {
+      // Error handled by mutation
     }
   };
 
@@ -166,52 +135,77 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
+  const isAnyLoading = isLoading || createSupplier.isPending || updateSupplier.isPending || deleteSupplier.isPending;
+
   return (
     <div className="space-y-6">
       {/* Actions */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 bg-dark-950 p-4 rounded-xl border border-dark-800">
-        <div className="relative flex-1 max-w-lg">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-          <input
-            type="text"
-            placeholder="بحث عن مورد..."
-            className="w-full bg-dark-900 border border-dark-700 text-white pr-10 pl-4 py-2 rounded-lg focus:border-fox-500 focus:outline-none"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+        <div className="flex items-center gap-4 flex-1 max-w-lg">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <input
+              type="text"
+              placeholder="بحث عن مورد..."
+              className="w-full bg-dark-900 border border-dark-700 text-white pr-10 pl-4 py-2 rounded-lg focus:border-fox-500 focus:outline-none"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-2 bg-dark-900 border border-dark-700 rounded-lg hover:bg-dark-800 transition-colors disabled:opacity-50"
+            title="تحديث"
+          >
+            <RefreshCw size={20} className={`text-gray-400 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-        <button onClick={handleOpenAdd} className="flex items-center gap-2 px-6 py-2 bg-fox-600 text-white rounded-lg hover:bg-fox-500 font-bold shadow-lg shadow-fox-500/20">
+        <button
+          onClick={handleOpenAdd}
+          disabled={isAnyLoading}
+          className="flex items-center gap-2 px-6 py-2 bg-fox-600 text-white rounded-lg hover:bg-fox-500 font-bold shadow-lg shadow-fox-500/20 disabled:opacity-50"
+        >
           <Plus size={18} /> <span>إضافة مورد</span>
         </button>
       </div>
 
       {/* Table */}
       <div className="bg-dark-950 rounded-xl border border-dark-800 overflow-hidden shadow-xl">
-        <table className="w-full text-right">
-          <thead className="bg-dark-900 text-gray-400">
-            <tr><th className="p-4">اسم المورد</th><th className="p-4">رقم الهاتف</th><th className="p-4">رصيد الحساب</th><th className="p-4">الإجراءات</th></tr>
-          </thead>
-          <tbody className="divide-y divide-dark-800 text-gray-300">
-            {filtered.map(supplier => (
-              <tr key={supplier.id} className="hover:bg-dark-900/50 transition-colors group">
-                <td className="p-4"><div className="flex items-center gap-3"><Truck size={20} className="text-blue-400" /><span className="font-medium text-white">{supplier.name}</span></div></td>
-                <td className="p-4 font-mono text-gray-400">{supplier.phone}</td>
-                <td className="p-4"><span className={`font-bold font-mono ${supplier.balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{supplier.balance.toLocaleString()} ج.م</span></td>
-                <td className="p-4">
-                  <div className="flex gap-2 items-center flex-wrap">
-                    <button onClick={() => setInvoicesSupplier(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded text-xs transition-colors"><Eye size={14} /> الفواتير</button>
-                    {supplier.balance > 0 && (
-                      <button onClick={() => openSettlementModal(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded text-xs transition-colors"><DollarSign size={14} /> تسوية</button>
-                    )}
-                    <button onClick={() => setSelectedStatementSupplier(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded text-xs transition-colors"><FileText size={14} /> كشف حساب</button>
-                    <button onClick={() => handleOpenEdit(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded text-xs transition-colors"><Edit2 size={14} /> تعديل</button>
-                    <button onClick={() => handleDelete(supplier.id)} className="p-1.5 hover:bg-red-900/20 text-gray-500 hover:text-red-500 rounded opacity-50 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-fox-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-400">جاري تحميل الموردين...</p>
+            </div>
+          </div>
+        ) : (
+          <table className="w-full text-right">
+            <thead className="bg-dark-900 text-gray-400">
+              <tr><th className="p-4">اسم المورد</th><th className="p-4">رقم الهاتف</th><th className="p-4">رصيد الحساب</th><th className="p-4">الإجراءات</th></tr>
+            </thead>
+            <tbody className="divide-y divide-dark-800 text-gray-300">
+              {filtered.map(supplier => (
+                <tr key={supplier.id} className="hover:bg-dark-900/50 transition-colors group">
+                  <td className="p-4"><div className="flex items-center gap-3"><Truck size={20} className="text-blue-400" /><span className="font-medium text-white">{supplier.name}</span></div></td>
+                  <td className="p-4 font-mono text-gray-400">{supplier.phone}</td>
+                  <td className="p-4"><span className={`font-bold font-mono ${supplier.balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{supplier.balance.toLocaleString()} ج.م</span></td>
+                  <td className="p-4">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <button onClick={() => setInvoicesSupplier(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded text-xs transition-colors"><Eye size={14} /> الفواتير</button>
+                      {supplier.balance > 0 && (
+                        <button onClick={() => openSettlementModal(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded text-xs transition-colors"><DollarSign size={14} /> تسوية</button>
+                      )}
+                      <button onClick={() => setSelectedStatementSupplier(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded text-xs transition-colors"><FileText size={14} /> كشف حساب</button>
+                      <button onClick={() => handleOpenEdit(supplier)} className="flex items-center gap-1 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded text-xs transition-colors"><Edit2 size={14} /> تعديل</button>
+                      <button onClick={() => handleDelete(supplier.id)} className="p-1.5 hover:bg-red-900/20 text-gray-500 hover:text-red-500 rounded opacity-50 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Add/Edit Modal */}
@@ -220,7 +214,16 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
           <div><label className="block text-sm text-gray-400 mb-1">اسم المورد</label><input required type="text" className="w-full bg-dark-900 border border-dark-700 text-white px-4 py-2 rounded-lg" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
           <div><label className="block text-sm text-gray-400 mb-1">رقم الهاتف</label><input required type="text" className="w-full bg-dark-900 border border-dark-700 text-white px-4 py-2 rounded-lg" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} /></div>
           <div><label className="block text-sm text-gray-400 mb-1">الرصيد الافتتاحي</label><input type="number" disabled={!!editingSupplier} className="w-full bg-dark-900 border border-dark-700 text-white px-4 py-2 rounded-lg disabled:opacity-50" value={formData.balance} onChange={e => setFormData({ ...formData, balance: Number(e.target.value) })} /></div>
-          <button type="submit" className="w-full bg-fox-600 hover:bg-fox-500 text-white py-2.5 rounded-lg font-bold mt-4 shadow-lg shadow-fox-500/20">{editingSupplier ? 'حفظ التعديلات' : 'حفظ المورد'}</button>
+          <button
+            type="submit"
+            disabled={createSupplier.isPending || updateSupplier.isPending}
+            className="w-full bg-fox-600 hover:bg-fox-500 text-white py-2.5 rounded-lg font-bold mt-4 shadow-lg shadow-fox-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {(createSupplier.isPending || updateSupplier.isPending) && (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
+            {editingSupplier ? 'حفظ التعديلات' : 'حفظ المورد'}
+          </button>
         </form>
       </Modal>
 
@@ -342,9 +345,12 @@ const Suppliers: React.FC<SuppliersProps> = ({ onDataChange }) => {
             <div className="flex gap-3 pt-4">
               <button
                 type="submit"
-                disabled={!settlementAmount || Number(settlementAmount) <= 0 || Number(settlementAmount) > settlementSupplier.balance}
-                className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!settlementAmount || Number(settlementAmount) <= 0 || Number(settlementAmount) > settlementSupplier.balance || settleDebt.isPending}
+                className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                {settleDebt.isPending && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                )}
                 تأكيد التسوية
               </button>
               <button

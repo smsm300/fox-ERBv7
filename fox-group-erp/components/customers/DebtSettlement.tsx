@@ -7,13 +7,15 @@ interface DebtSettlementProps {
   onClose: () => void;
   customer: Customer | null;
   onSettle: (customerId: number, amount: number, paymentMethod: PaymentMethod) => void;
+  isLoading?: boolean;
 }
 
 export const DebtSettlement: React.FC<DebtSettlementProps> = ({
   isOpen,
   onClose,
   customer,
-  onSettle
+  onSettle,
+  isLoading = false
 }) => {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
@@ -97,9 +99,12 @@ export const DebtSettlement: React.FC<DebtSettlementProps> = ({
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              disabled={!amount || Number(amount) <= 0 || Number(amount) > debtAmount}
-              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!amount || Number(amount) <= 0 || Number(amount) > debtAmount || isLoading}
+              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {isLoading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
               تأكيد التسوية
             </button>
             <button

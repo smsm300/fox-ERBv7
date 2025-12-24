@@ -1,19 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Search, RefreshCw } from 'lucide-react';
 import { Product } from '../types';
 import { ProductForm } from '../components/inventory/ProductForm';
 import { ProductList } from '../components/inventory/ProductList';
 import { StockAdjustment } from '../components/inventory/StockAdjustment';
-import { productsAPI } from '../services/endpoints';
-import { handleAPIError } from '../services/errorHandler';
+import {
+  useProducts,
+  useCreateProduct,
+  useUpdateProduct,
+  useDeleteProduct,
+  useAdjustStock
+} from '../hooks/useProducts';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { showToast } from '../components/ui/Toast';
 
 interface InventoryProps {
   onProductsChange?: () => void;
 }
 
 const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -21,24 +26,15 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
   const [isStockAdjustmentOpen, setIsStockAdjustmentOpen] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  // React Query hooks
+  const { data: products = [], isLoading, refetch, isFetching } = useProducts();
+  const createProduct = useCreateProduct();
+  const updateProduct = useUpdateProduct();
+  const deleteProduct = useDeleteProduct();
+  const adjustStock = useAdjustStock();
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const response = await productsAPI.list();
-      // Handle both paginated and non-paginated responses
-      const productsData = (response.data as any).results || response.data;
-      setProducts(Array.isArray(productsData) ? productsData : []);
-    } catch (err: any) {
-      alert(handleAPIError(err));
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Confirm dialog hook
+  const { confirm } = useConfirm();
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>({
     sku: '',
@@ -99,24 +95,16 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
   };
 
   const handleSubmit = async (data: Omit<Product, 'id'>) => {
-    setLoading(true);
     try {
       if (editingProduct) {
-        await productsAPI.update(editingProduct.id, data);
-        alert('تم تحديث المنتج بنجاح');
+        await updateProduct.mutateAsync({ id: editingProduct.id, data });
       } else {
-        await productsAPI.create(data);
-        alert('تم إضافة المنتج بنجاح');
+        await createProduct.mutateAsync(data);
       }
       setIsFormOpen(false);
-      await fetchProducts();
-      // Notify parent to refresh products in other pages
       onProductsChange?.();
-    } catch (err: any) {
-      console.error('Error in handleSubmit:', err);
-      alert(handleAPIError(err));
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -133,43 +121,35 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
   };
 
   const handleStockAdjustment = async (productId: number, quantity: number, reason: string) => {
-    setLoading(true);
     try {
-      await productsAPI.adjustStock(productId, { quantity_diff: quantity, reason });
-      alert('تم تعديل المخزون بنجاح');
+      await adjustStock.mutateAsync({ id: productId, data: { quantity_diff: quantity, reason } });
       setIsStockAdjustmentOpen(false);
-      await fetchProducts();
       onProductsChange?.();
-    } catch (err: any) {
-      alert(handleAPIError(err));
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      // Error is handled by the mutation hook
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
-      setLoading(true);
+    const confirmed = await confirm({
+      title: 'حذف المنتج',
+      message: 'هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.',
+      confirmText: 'حذف',
+      cancelText: 'إلغاء',
+      type: 'danger'
+    });
+
+    if (confirmed) {
       try {
-        await productsAPI.delete(id);
-        alert('تم حذف المنتج بنجاح');
-        await fetchProducts();
+        await deleteProduct.mutateAsync(id);
         onProductsChange?.();
-      } catch (err: any) {
-        alert(handleAPIError(err));
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        // Error is handled by the mutation hook
       }
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">جاري التحميل...</div>
-      </div>
-    );
-  }
+  const isAnyLoading = isLoading || createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || adjustStock.isPending;
 
   return (
     <div className="space-y-6">
@@ -186,11 +166,22 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+
+          {/* Refresh Button */}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-2 bg-dark-900 border border-dark-700 rounded-lg hover:bg-dark-800 transition-colors disabled:opacity-50"
+            title="تحديث"
+          >
+            <RefreshCw size={20} className={`text-gray-400 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
         </div>
 
         <button
           onClick={handleOpenForm}
-          className="flex items-center gap-2 bg-fox-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors whitespace-nowrap"
+          disabled={isAnyLoading}
+          className="flex items-center gap-2 bg-fox-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors whitespace-nowrap disabled:opacity-50"
         >
           <Plus size={20} />
           إضافة منتج
@@ -215,12 +206,21 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
 
       {/* Products Table */}
       <div className="bg-dark-950 rounded-xl border border-dark-800 p-6">
-        <ProductList
-          products={filteredProducts}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onAdjustStock={handleAdjustStock}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-fox-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-400">جاري تحميل المنتجات...</p>
+            </div>
+          </div>
+        ) : (
+          <ProductList
+            products={filteredProducts}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAdjustStock={handleAdjustStock}
+          />
+        )}
       </div>
 
       {/* Product Form Modal */}
@@ -233,6 +233,7 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
         onFormChange={handleFormChange}
         existingCategories={existingCategories}
         existingUnits={existingUnits}
+        isLoading={createProduct.isPending || updateProduct.isPending}
       />
 
       {/* Stock Adjustment Modal */}
@@ -241,6 +242,7 @@ const Inventory: React.FC<InventoryProps> = ({ onProductsChange }) => {
         onClose={() => setIsStockAdjustmentOpen(false)}
         product={adjustingProduct}
         onAdjust={handleStockAdjustment}
+        isLoading={adjustStock.isPending}
       />
     </div>
   );

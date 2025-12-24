@@ -3,15 +3,72 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Fox Group ERP - نظام إدارة المبيعات والمخزون المتكامل" />
+  <meta name="theme-color" content="#0D4D4D" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Fox ERP" />
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fox Group ERP</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Favicon and Icons -->
+  <link rel="icon" type="image/png" href="/fox-logo.png" />
+  <link rel="apple-touch-icon" href="/fox-logo.png" />
+
+  <!-- Fonts -->
   <link href="/fonts/fonts.css" rel="stylesheet">
+
+  <!-- Preconnect for faster font loading -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 
 <body>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js')
+          .then(function (registration) {
+            console.log('ServiceWorker registered with scope:', registration.scope);
+
+            // Check for updates periodically
+            setInterval(function () {
+              registration.update();
+            }, 60 * 60 * 1000); // Every hour
+          })
+          .catch(function (error) {
+            console.log('ServiceWorker registration failed:', error);
+          });
+      });
+    }
+  </script>
+
+  <!-- Offline indicator styles -->
+  <noscript>
+    <style>
+      body::before {
+        content: 'يرجى تفعيل JavaScript لاستخدام هذا التطبيق';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 1rem;
+        background: #dc2626;
+        color: white;
+        text-align: center;
+        font-family: sans-serif;
+        z-index: 9999;
+      }
+    </style>
+  </noscript>
 </body>
 
 </html>

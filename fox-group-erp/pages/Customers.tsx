@@ -1,23 +1,28 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, X, Printer, FileText } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Search, X, Printer, FileText, RefreshCw } from 'lucide-react';
 import { Customer, PaymentMethod, Transaction, TransactionType, AppSettings } from '../types';
 import { CustomerForm } from '../components/customers/CustomerForm';
 import { CustomerList } from '../components/customers/CustomerList';
 import { DebtSettlement } from '../components/customers/DebtSettlement';
 import { Modal } from '../components/Modal';
-import { customersAPI, transactionsAPI, settingsAPI } from '../services/endpoints';
-import { handleAPIError } from '../services/errorHandler';
 import { useDebounce } from '../hooks/useDebounce';
+import {
+  useCustomers,
+  useCreateCustomer,
+  useUpdateCustomer,
+  useDeleteCustomer,
+  useSettleCustomerDebt
+} from '../hooks/useCustomers';
+import { useTransactions } from '../hooks/useTransactions';
+import { useSettings } from '../hooks/useSettings';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { showToast } from '../components/ui/Toast';
 
 interface CustomersProps {
   onDataChange?: () => void;
 }
 
 const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -28,6 +33,18 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
   const [invoicesCustomer, setInvoicesCustomer] = useState<Customer | null>(null);
   const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
 
+  // React Query hooks
+  const { data: customers = [], isLoading, refetch, isFetching } = useCustomers();
+  const { data: transactions = [] } = useTransactions();
+  const { data: settings } = useSettings();
+
+  const createCustomer = useCreateCustomer();
+  const updateCustomer = useUpdateCustomer();
+  const deleteCustomer = useDeleteCustomer();
+  const settleDebt = useSettleCustomerDebt();
+
+  const { confirm } = useConfirm();
+
   const [formData, setFormData] = useState<Omit<Customer, 'id' | 'balance'>>({
     name: '',
     phone: '',
@@ -35,51 +52,9 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
     creditLimit: 0
   });
 
-  useEffect(() => {
-    fetchCustomers();
-    fetchTransactions();
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const response = await settingsAPI.get();
-      setSettings(response.data);
-    } catch (err: any) {
-      console.error('Failed to fetch settings:', err);
-    }
-  };
-
-  const fetchTransactions = async () => {
-    try {
-      const response = await transactionsAPI.list();
-      const transactionsData = (response.data as any).results || response.data;
-      setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
-    } catch (err: any) {
-      console.error('Failed to fetch transactions:', err);
-      setTransactions([]);
-    }
-  };
-
-  const fetchCustomers = async () => {
-    setLoading(true);
-    try {
-      const response = await customersAPI.list();
-      // Handle both paginated and non-paginated responses
-      const customersData = (response.data as any).results || response.data;
-      setCustomers(Array.isArray(customersData) ? customersData : []);
-    } catch (err: any) {
-      alert(handleAPIError(err));
-      setCustomers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getCustomerTransactions = (customer: Customer) => {
     return transactions
       .filter(t => {
-        // Match by relatedId or customerName
         const matchById = t.relatedId === customer.id;
         const matchByName = t.customerName && t.customerName === customer.name;
         return (matchById || matchByName) && t.type === TransactionType.SALE;
@@ -118,22 +93,16 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
   };
 
   const handleSubmit = async (data: Omit<Customer, 'id' | 'balance'>) => {
-    setLoading(true);
     try {
       if (editingCustomer) {
-        await customersAPI.update(editingCustomer.id, data);
-        alert('تم تحديث بيانات العميل بنجاح');
+        await updateCustomer.mutateAsync({ id: editingCustomer.id, data });
       } else {
-        await customersAPI.create(data);
-        alert('تم إضافة العميل بنجاح');
+        await createCustomer.mutateAsync(data);
       }
       setIsFormOpen(false);
-      await fetchCustomers();
       onDataChange?.();
-    } catch (err: any) {
-      alert(handleAPIError(err));
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      // Error handled by mutation
     }
   };
 
@@ -148,58 +117,65 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
 
   const handleDebtSettlement = async (customerId: number, amount: number, paymentMethod: PaymentMethod) => {
     try {
-      await customersAPI.settleDebt(customerId, { amount, payment_method: paymentMethod });
-      alert('تم تسجيل تسوية المديونية بنجاح');
+      await settleDebt.mutateAsync({ id: customerId, data: { amount, payment_method: paymentMethod } });
       setIsDebtSettlementOpen(false);
       setSettlingCustomer(null);
-      await fetchCustomers();
-    } catch (err: any) {
-      alert(handleAPIError(err));
+    } catch (err) {
+      // Error handled by mutation
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا العميل؟')) {
-      setLoading(true);
+    const confirmed = await confirm({
+      title: 'حذف العميل',
+      message: 'هل أنت متأكد من حذف هذا العميل؟ سيتم حذف جميع بياناته.',
+      confirmText: 'حذف',
+      cancelText: 'إلغاء',
+      type: 'danger'
+    });
+
+    if (confirmed) {
       try {
-        await customersAPI.delete(id);
-        alert('تم حذف العميل بنجاح');
-        await fetchCustomers();
+        await deleteCustomer.mutateAsync(id);
         onDataChange?.();
-      } catch (err: any) {
-        alert(handleAPIError(err));
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        // Error handled by mutation
       }
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">جاري التحميل...</div>
-      </div>
-    );
-  }
+  const isAnyLoading = isLoading || createCustomer.isPending || updateCustomer.isPending || deleteCustomer.isPending;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-dark-950 p-4 rounded-xl border border-dark-800 gap-4">
-        <div className="relative flex-1 md:w-80">
-          <Search className="absolute right-3 top-2.5 text-gray-500" size={20} />
-          <input
-            type="text"
-            placeholder="ابحث عن عميل..."
-            className="w-full bg-dark-900 border border-dark-700 text-white pr-10 pl-4 py-2 rounded-lg focus:border-fox-500 outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="relative flex-1 md:w-80">
+            <Search className="absolute right-3 top-2.5 text-gray-500" size={20} />
+            <input
+              type="text"
+              placeholder="ابحث عن عميل..."
+              className="w-full bg-dark-900 border border-dark-700 text-white pr-10 pl-4 py-2 rounded-lg focus:border-fox-500 outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-2 bg-dark-900 border border-dark-700 rounded-lg hover:bg-dark-800 transition-colors disabled:opacity-50"
+            title="تحديث"
+          >
+            <RefreshCw size={20} className={`text-gray-400 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
         </div>
 
         <button
           onClick={handleOpenForm}
-          className="flex items-center gap-2 bg-fox-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors whitespace-nowrap"
+          disabled={isAnyLoading}
+          className="flex items-center gap-2 bg-fox-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors whitespace-nowrap disabled:opacity-50"
         >
           <Plus size={20} />
           إضافة عميل
@@ -208,14 +184,23 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
 
       {/* Customers Table */}
       <div className="bg-dark-950 rounded-xl border border-dark-800 p-6">
-        <CustomerList
-          customers={filteredCustomers}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onSettleDebt={handleSettleDebt}
-          onViewInvoices={setInvoicesCustomer}
-          onViewStatement={setStatementCustomer}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-fox-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-400">جاري تحميل العملاء...</p>
+            </div>
+          </div>
+        ) : (
+          <CustomerList
+            customers={filteredCustomers}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onSettleDebt={handleSettleDebt}
+            onViewInvoices={setInvoicesCustomer}
+            onViewStatement={setStatementCustomer}
+          />
+        )}
       </div>
 
       {/* Customer Form Modal */}
@@ -226,6 +211,7 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
         editingCustomer={editingCustomer}
         formData={formData}
         onFormChange={handleFormChange}
+        isLoading={createCustomer.isPending || updateCustomer.isPending}
       />
 
       {/* Debt Settlement Modal */}
@@ -234,6 +220,7 @@ const Customers: React.FC<CustomersProps> = ({ onDataChange }) => {
         onClose={() => setIsDebtSettlementOpen(false)}
         customer={settlingCustomer}
         onSettle={handleDebtSettlement}
+        isLoading={settleDebt.isPending}
       />
 
       {/* Invoices Modal */}

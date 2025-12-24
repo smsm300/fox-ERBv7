@@ -7,13 +7,15 @@ interface StockAdjustmentProps {
   onClose: () => void;
   product: Product | null;
   onAdjust: (productId: number, quantity: number, reason: string) => void;
+  isLoading?: boolean;
 }
 
 export const StockAdjustment: React.FC<StockAdjustmentProps> = ({
   isOpen,
   onClose,
   product,
-  onAdjust
+  onAdjust,
+  isLoading = false
 }) => {
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
   const [quantity, setQuantity] = useState('');
@@ -55,11 +57,10 @@ export const StockAdjustment: React.FC<StockAdjustmentProps> = ({
               <button
                 type="button"
                 onClick={() => setAdjustmentType('add')}
-                className={`py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                  adjustmentType === 'add'
+                className={`py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${adjustmentType === 'add'
                     ? 'bg-emerald-500 text-white'
                     : 'bg-dark-900 text-gray-400 hover:bg-dark-800 border border-dark-700'
-                }`}
+                  }`}
               >
                 <Plus size={16} />
                 إضافة
@@ -67,11 +68,10 @@ export const StockAdjustment: React.FC<StockAdjustmentProps> = ({
               <button
                 type="button"
                 onClick={() => setAdjustmentType('subtract')}
-                className={`py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                  adjustmentType === 'subtract'
+                className={`py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${adjustmentType === 'subtract'
                     ? 'bg-red-500 text-white'
                     : 'bg-dark-900 text-gray-400 hover:bg-dark-800 border border-dark-700'
-                }`}
+                  }`}
               >
                 <Minus size={16} />
                 خصم
@@ -108,7 +108,7 @@ export const StockAdjustment: React.FC<StockAdjustmentProps> = ({
             <div className="bg-dark-900 p-4 rounded-lg border border-dark-800">
               <p className="text-sm text-gray-400 mb-1">الكمية بعد التعديل:</p>
               <p className="text-2xl font-bold text-fox-400">
-                {adjustmentType === 'add' 
+                {adjustmentType === 'add'
                   ? Number(product.quantity) + Number(quantity)
                   : Number(product.quantity) - Number(quantity)
                 } {product.unit}
@@ -119,8 +119,12 @@ export const StockAdjustment: React.FC<StockAdjustmentProps> = ({
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors"
+              disabled={isLoading}
+              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {isLoading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
               تأكيد التعديل
             </button>
             <button

@@ -1,0 +1,47 @@
+{
+    "name": "Fox Group ERP",
+    "short_name": "Fox ERP",
+    "description": "نظام إدارة المبيعات والمخزون المتكامل",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#0a0a0a",
+    "theme_color": "#0D4D4D",
+    "dir": "rtl",
+    "lang": "ar",
+    "icons": [
+        {
+            "src": "/fox-logo.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/fox-logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "business",
+        "productivity"
+    ],
+    "screenshots": [],
+    "shortcuts": [
+        {
+            "name": "المبيعات",
+            "short_name": "المبيعات",
+            "description": "نقطة البيع",
+            "url": "/#sales",
+            "icons": []
+        },
+        {
+            "name": "المخزون",
+            "short_name": "المخزون",
+            "description": "إدارة المنتجات",
+            "url": "/#inventory",
+            "icons": []
+        }
+    ]
+}

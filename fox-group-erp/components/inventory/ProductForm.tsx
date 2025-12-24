@@ -11,6 +11,7 @@ interface ProductFormProps {
   onFormChange: (field: keyof Omit<Product, 'id'>, value: any) => void;
   existingCategories?: string[];
   existingUnits?: string[];
+  isLoading?: boolean;
 }
 
 export const ProductForm: React.FC<ProductFormProps> = ({
@@ -21,7 +22,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   formData,
   onFormChange,
   existingCategories = [],
-  existingUnits = []
+  existingUnits = [],
+  isLoading = false
 }) => {
   const [imageMode, setImageMode] = useState<'url' | 'upload'>('url');
   const [imagePreview, setImagePreview] = useState<string | null>(formData.image || null);
@@ -451,8 +453,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors"
+              disabled={isLoading}
+              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {isLoading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
               {editingProduct ? 'حفظ التعديلات' : 'إضافة المنتج'}
             </button>
             <button

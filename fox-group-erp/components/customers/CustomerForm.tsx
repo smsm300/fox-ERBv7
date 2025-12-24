@@ -9,6 +9,7 @@ interface CustomerFormProps {
   editingCustomer: Customer | null;
   formData: Omit<Customer, 'id' | 'balance'>;
   onFormChange: (field: keyof Omit<Customer, 'id' | 'balance'>, value: any) => void;
+  isLoading?: boolean;
 }
 
 export const CustomerForm: React.FC<CustomerFormProps> = ({
@@ -17,7 +18,8 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
   onSubmit,
   editingCustomer,
   formData,
-  onFormChange
+  onFormChange,
+  isLoading = false
 }) => {
   if (!isOpen) return null;
 
@@ -89,8 +91,12 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors"
+              disabled={isLoading}
+              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {isLoading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
               {editingCustomer ? 'حفظ التعديلات' : 'إضافة العميل'}
             </button>
             <button

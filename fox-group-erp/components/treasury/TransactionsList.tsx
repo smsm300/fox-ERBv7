@@ -19,7 +19,7 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
   onReject,
   onReturn
 }) => {
-  
+
   const canReturn = (transaction: Transaction) => {
     return (
       (transaction.type === TransactionType.SALE || transaction.type === TransactionType.PURCHASE) &&
@@ -86,9 +86,9 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
                   <span className="px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded text-xs">
                     معلق
                   </span>
-                ) : transaction.status === 'approved' ? (
+                ) : transaction.status === 'completed' ? (
                   <span className="px-2 py-1 bg-emerald-900/30 text-emerald-400 rounded text-xs">
-                    مقبول
+                    مكتمل
                   </span>
                 ) : transaction.status === 'rejected' ? (
                   <span className="px-2 py-1 bg-red-900/30 text-red-400 rounded text-xs">

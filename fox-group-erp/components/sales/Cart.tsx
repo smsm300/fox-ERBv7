@@ -8,8 +8,9 @@ import {
   Search,
   UserPlus,
   CreditCard,
+  Tag,
 } from 'lucide-react';
-import { CartItem, Customer, PaymentMethod } from '../../types';
+import { CartItem, Customer, PaymentMethod, User as AppUser } from '../../types';
 import { Modal } from '../Modal';
 
 interface CartProps {
@@ -19,9 +20,12 @@ interface CartProps {
   paymentMethod: PaymentMethod;
   isDirectSale: boolean;
   dueDate: string;
+  currentUser?: AppUser;
+  invoiceDiscount: number;
   onUpdateQuantity: (id: number, delta: number) => void;
   onRemoveItem: (id: number) => void;
   onOpenDiscountModal: (item: CartItem) => void;
+  onInvoiceDiscountChange: (amount: number) => void;
   onCustomerChange: (customerId: number) => void;
   onPaymentMethodChange: (method: PaymentMethod) => void;
   onDirectSaleChange: (value: boolean) => void;
@@ -29,7 +33,7 @@ interface CartProps {
   onCompleteSale: () => void;
   onHoldCart: () => void;
   onClearCart: () => void;
-  onAddCustomer?: (customer: Omit<Customer, 'id'>) => Customer;
+  onAddCustomer?: (customer: Omit<Customer, 'id'>) => Promise<Customer>;
 }
 
 export const Cart: React.FC<CartProps> = ({
@@ -39,9 +43,12 @@ export const Cart: React.FC<CartProps> = ({
   paymentMethod,
   isDirectSale,
   dueDate,
+  currentUser,
+  invoiceDiscount,
   onUpdateQuantity,
   onRemoveItem,
   onOpenDiscountModal,
+  onInvoiceDiscountChange,
   onCustomerChange,
   onPaymentMethodChange,
   onDirectSaleChange,
@@ -55,21 +62,26 @@ export const Cart: React.FC<CartProps> = ({
     (sum, item) => sum + Number(item.sellPrice) * Number(item.cartQuantity),
     0
   );
-  const totalDiscount = cart.reduce(
+  const totalItemDiscount = cart.reduce(
     (sum, item) => sum + (Number(item.discount) || 0) * Number(item.cartQuantity),
     0
   );
-  const total = subTotal - totalDiscount;
+
+  // Total logic: (Subtotal - Item Discounts) - Invoice Discount
+  const total = Math.max(0, subTotal - totalItemDiscount - invoiceDiscount);
 
   const selectedCustomerData = customers.find((c) => c.id === selectedCustomer);
-  const cashCustomer = customers.find((c) => c.name === 'عميل نقدي') || customers[0];
+
+  const canApplyDiscount = currentUser?.role === 'admin';
 
   // Modal states
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+  const [isInvoiceDiscountModalOpen, setIsInvoiceDiscountModalOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' });
+  const [tempInvoiceDiscount, setTempInvoiceDiscount] = useState('');
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers;
@@ -80,22 +92,27 @@ export const Cart: React.FC<CartProps> = ({
     );
   }, [customers, customerSearch]);
 
-  const handleAddNewCustomer = () => {
+  const handleAddNewCustomer = async () => {
     if (!newCustomer.name.trim()) {
       alert('يرجى إدخال اسم العميل');
       return;
     }
     if (onAddCustomer) {
-      const addedCustomer = onAddCustomer({
-        name: newCustomer.name,
-        phone: newCustomer.phone || '',
-        balance: 0,
-        type: 'business',
-        creditLimit: 10000,
-      });
-      // Select the newly added customer
-      if (addedCustomer && addedCustomer.id) {
-        onCustomerChange(addedCustomer.id);
+      try {
+        const addedCustomer = await onAddCustomer({
+          name: newCustomer.name,
+          phone: newCustomer.phone || '',
+          balance: 0,
+          type: 'business',
+          creditLimit: 10000,
+        });
+        // Select the newly added customer
+        if (addedCustomer && addedCustomer.id) {
+          onCustomerChange(addedCustomer.id);
+        }
+      } catch (error) {
+        console.error("Failed to add customer in Cart:", error);
+        // Alert is likely already shown by App.tsx
       }
     }
     setNewCustomer({ name: '', phone: '' });
@@ -140,21 +157,19 @@ export const Cart: React.FC<CartProps> = ({
         <span className="text-xs text-gray-400">الدفع:</span>
         <button
           onClick={() => onPaymentMethodChange(PaymentMethod.CASH)}
-          className={`px-3 py-1 rounded text-xs font-medium ${
-            paymentMethod === PaymentMethod.CASH
-              ? 'bg-fox-500 text-white'
-              : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
-          }`}
+          className={`px-3 py-1 rounded text-xs font-medium ${paymentMethod === PaymentMethod.CASH
+            ? 'bg-fox-500 text-white'
+            : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
+            }`}
         >
           نقدي
         </button>
         <button
           onClick={() => setIsPaymentModalOpen(true)}
-          className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1 ${
-            paymentMethod !== PaymentMethod.CASH
-              ? 'bg-fox-500 text-white'
-              : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
-          }`}
+          className={`px-3 py-1 rounded text-xs font-medium flex items-center gap-1 ${paymentMethod !== PaymentMethod.CASH
+            ? 'bg-fox-500 text-white'
+            : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
+            }`}
         >
           <CreditCard size={12} />
           {paymentMethod !== PaymentMethod.CASH
@@ -210,9 +225,20 @@ export const Cart: React.FC<CartProps> = ({
                 </button>
               </div>
 
+              {/* Item Discount Button - Restricted */}
               <button
-                onClick={() => onOpenDiscountModal(item)}
-                className="w-5 h-5 flex items-center justify-center text-fox-400 hover:bg-fox-500/20 rounded"
+                onClick={() => {
+                  if (canApplyDiscount) {
+                    onOpenDiscountModal(item);
+                  } else {
+                    alert("غير مسموح لك بعمل خصم.");
+                  }
+                }}
+                className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${canApplyDiscount
+                  ? 'text-fox-400 hover:bg-fox-500/20'
+                  : 'text-gray-600 cursor-not-allowed opacity-50'
+                  }`}
+                title="خصم على المنتج (للمسؤول فقط)"
               >
                 <Percent size={10} />
               </button>
@@ -234,19 +260,49 @@ export const Cart: React.FC<CartProps> = ({
 
       {/* Totals - Compact */}
       <div className="border-t border-dark-800 pt-2 mt-2 space-y-1">
-        {totalDiscount > 0 && (
+        {totalItemDiscount > 0 && (
           <div className="flex justify-between text-xs text-emerald-400">
-            <span>خصم</span>
-            <span>- {totalDiscount.toLocaleString()}</span>
+            <span>خصم أصناف</span>
+            <span>- {totalItemDiscount.toLocaleString()}</span>
           </div>
         )}
-        <div className="flex justify-between text-lg font-bold text-white">
+
+        {/* Invoice Discount Row */}
+        <div className="flex justify-between text-xs items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300">خصم إضافي</span>
+            <button
+              onClick={() => {
+                if (canApplyDiscount) {
+                  setTempInvoiceDiscount(invoiceDiscount.toString());
+                  setIsInvoiceDiscountModalOpen(true);
+                } else {
+                  alert("غير مسموح لك بعمل خصم.");
+                }
+              }}
+              className={`p-1 rounded text-[10px] flex items-center gap-1 ${canApplyDiscount
+                ? 'bg-fox-500/10 text-fox-400 hover:bg-fox-500/20'
+                : 'bg-dark-800 text-gray-600 cursor-not-allowed'
+                }`}
+            >
+              <Tag size={10} />
+              <span>تعديل</span>
+            </button>
+          </div>
+          {invoiceDiscount > 0 ? (
+            <span className="text-emerald-400">- {invoiceDiscount.toLocaleString()}</span>
+          ) : (
+            <span className="text-gray-500">0</span>
+          )}
+        </div>
+
+        <div className="flex justify-between text-lg font-bold text-white pt-1 border-t border-dark-800/50">
           <span>الإجمالي</span>
           <span className="text-fox-400">{total.toLocaleString()} ج.م</span>
         </div>
       </div>
 
-      {/* Action Buttons - All in one row */}
+      {/* ... Action Buttons ... (will continue) */}
       <div className="flex gap-2 mt-3">
         <button
           onClick={onCompleteSale}
@@ -298,11 +354,10 @@ export const Cart: React.FC<CartProps> = ({
                   setIsCustomerSearchOpen(false);
                   setCustomerSearch('');
                 }}
-                className={`w-full text-right px-3 py-2 rounded-lg text-sm flex justify-between items-center ${
-                  selectedCustomer === c.id
-                    ? 'bg-fox-500/20 text-fox-400 border border-fox-500/30'
-                    : 'bg-dark-900 text-white hover:bg-dark-800'
-                }`}
+                className={`w-full text-right px-3 py-2 rounded-lg text-sm flex justify-between items-center ${selectedCustomer === c.id
+                  ? 'bg-fox-500/20 text-fox-400 border border-fox-500/30'
+                  : 'bg-dark-900 text-white hover:bg-dark-800'
+                  }`}
               >
                 <span>{c.name}</span>
                 {c.balance < 0 && (
@@ -325,6 +380,7 @@ export const Cart: React.FC<CartProps> = ({
         <div className="space-y-3">
           {[
             { value: PaymentMethod.WALLET, label: 'محفظة إلكترونية', icon: '📱' },
+            { value: PaymentMethod.INSTAPAY, label: 'Instapay', icon: '🏦' },
             { value: PaymentMethod.DEFERRED, label: 'آجل (على الحساب)', icon: '📋' },
           ].map((method) => (
             <button
@@ -337,16 +393,14 @@ export const Cart: React.FC<CartProps> = ({
                 method.value === PaymentMethod.DEFERRED &&
                 selectedCustomerData?.type === 'consumer'
               }
-              className={`w-full p-3 rounded-lg text-right flex items-center gap-3 ${
-                paymentMethod === method.value
-                  ? 'bg-fox-500/20 border border-fox-500/30 text-fox-400'
-                  : 'bg-dark-900 text-white hover:bg-dark-800 border border-dark-700'
-              } ${
-                method.value === PaymentMethod.DEFERRED &&
-                selectedCustomerData?.type === 'consumer'
+              className={`w-full p-3 rounded-lg text-right flex items-center gap-3 ${paymentMethod === method.value
+                ? 'bg-fox-500/20 border border-fox-500/30 text-fox-400'
+                : 'bg-dark-900 text-white hover:bg-dark-800 border border-dark-700'
+                } ${method.value === PaymentMethod.DEFERRED &&
+                  selectedCustomerData?.type === 'consumer'
                   ? 'opacity-50 cursor-not-allowed'
                   : ''
-              }`}
+                }`}
             >
               <span className="text-2xl">{method.icon}</span>
               <span className="font-medium">{method.label}</span>
@@ -404,6 +458,61 @@ export const Cart: React.FC<CartProps> = ({
           >
             إضافة العميل
           </button>
+        </div>
+      </Modal>
+
+      {/* Invoice Discount Modal */}
+      <Modal
+        isOpen={isInvoiceDiscountModalOpen}
+        onClose={() => {
+          setIsInvoiceDiscountModalOpen(false);
+          setTempInvoiceDiscount('');
+        }}
+        title="خصم إضافي على الفاتورة"
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-gray-400 text-sm mb-2">إجمالي الفاتورة الحالي: <span className="text-white font-bold">{(subTotal - totalItemDiscount).toLocaleString()} ج.م</span></p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">قيمة الخصم (ج.م)</label>
+            <input
+              type="number"
+              min="0"
+              max={subTotal - totalItemDiscount}
+              value={tempInvoiceDiscount}
+              onChange={(e) => setTempInvoiceDiscount(e.target.value)}
+              className="w-full bg-dark-900 border border-dark-700 text-white px-3 py-2 rounded-lg focus:border-fox-500 outline-none"
+              placeholder="0"
+              autoFocus
+            />
+          </div>
+          <div className="text-sm text-gray-400">
+            صافي الفاتورة: <span className="text-fox-400 font-bold">{Math.max(0, subTotal - totalItemDiscount - (Number(tempInvoiceDiscount) || 0)).toLocaleString()} ج.م</span>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => {
+                const val = Number(tempInvoiceDiscount) || 0;
+                if (val < 0) return alert("قيمة الخصم غير صحيحة");
+                onInvoiceDiscountChange(val);
+                setIsInvoiceDiscountModalOpen(false);
+              }}
+              className="flex-1 bg-fox-500 text-white py-2 rounded-lg font-bold hover:bg-fox-600"
+            >
+              تطبيق الخصم
+            </button>
+            <button
+              onClick={() => {
+                setIsInvoiceDiscountModalOpen(false);
+                setTempInvoiceDiscount('');
+              }}
+              className="flex-1 bg-dark-800 text-gray-300 py-2 rounded-lg hover:bg-dark-700"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

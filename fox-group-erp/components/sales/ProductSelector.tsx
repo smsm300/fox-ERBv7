@@ -23,13 +23,13 @@ export const ProductSelector: React.FC<ProductSelectorProps> = ({
 }) => {
   // Ensure products is always an array
   const safeProducts = Array.isArray(products) ? products : [];
-  
+
   const categories = ['all', ...Array.from(new Set(safeProducts.map(p => p.category)))];
-  
+
   const filteredProducts = safeProducts.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ((p as any).barcode && (p as any).barcode.includes(searchTerm));
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ((p as any).barcode && (p as any).barcode.includes(searchTerm));
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -56,11 +56,10 @@ export const ProductSelector: React.FC<ProductSelectorProps> = ({
           <button
             key={cat}
             onClick={() => onCategoryChange(cat)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-              selectedCategory === cat
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${selectedCategory === cat
                 ? 'bg-fox-500 text-white shadow-md'
                 : 'bg-dark-900 text-gray-400 hover:bg-dark-800 border border-dark-700'
-            }`}
+              }`}
           >
             {cat === 'all' ? 'الكل' : cat}
           </button>
@@ -80,24 +79,39 @@ export const ProductSelector: React.FC<ProductSelectorProps> = ({
               key={product.id}
               onClick={() => onAddToCart(product)}
               disabled={product.quantity === 0}
-              className={`bg-dark-900 border border-dark-700 rounded-lg p-3 text-right hover:border-fox-500 transition-all group ${
-                product.quantity === 0 ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className={`bg-dark-900 border border-dark-700 rounded-lg p-3 text-right hover:border-fox-500 transition-all group relative overflow-hidden flex flex-col h-full ${product.quantity === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
             >
-              <div className="flex justify-between items-start mb-2">
-                <span className={`text-xs px-2 py-0.5 rounded ${
-                  product.quantity === 0 ? 'bg-red-900/30 text-red-400' :
-                  product.quantity <= product.minStockAlert ? 'bg-yellow-900/30 text-yellow-400' :
-                  'bg-emerald-900/30 text-emerald-400'
-                }`}>
+              {/* Product Image */}
+              <div className="w-full h-32 mb-2 bg-dark-800 rounded-md overflow-hidden flex-shrink-0">
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-dark-600">
+                    <Box size={32} />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-start w-full">
+                <span className={`text-xs px-2 py-0.5 rounded ${product.quantity === 0 ? 'bg-red-900/30 text-red-400' :
+                    product.quantity <= product.minStockAlert ? 'bg-yellow-900/30 text-yellow-400' :
+                      'bg-emerald-900/30 text-emerald-400'
+                  }`}>
                   {product.quantity} {product.unit}
                 </span>
               </div>
-              <h3 className="font-bold text-white text-sm mb-1 group-hover:text-fox-400 transition-colors">
+              <h3 className="font-bold text-white text-sm mb-1 group-hover:text-fox-400 transition-colors line-clamp-2 w-full">
                 {product.name}
               </h3>
-              <p className="text-xs text-gray-500 mb-2">{product.sku}</p>
-              <p className="text-lg font-bold text-fox-400">{product.sellPrice.toLocaleString()} ج.م</p>
+              <div className="mt-auto w-full">
+                <p className="text-xs text-gray-500 mb-1">{product.sku}</p>
+                <p className="text-lg font-bold text-fox-400">{product.sellPrice.toLocaleString()} ج.م</p>
+              </div>
             </button>
           ))
         )}

@@ -67,10 +67,12 @@ export interface Transaction {
   supplierName?: string; // Supplier name from API
   customerName?: string; // Customer name from API
   items?: CartItem[];
+  invoiceNumber?: string;
   status?: 'pending' | 'completed' | 'rejected'; // Approval Workflow
   dueDate?: string; // For Deferred payments
   isDirectSale?: boolean; // To handle returns correctly (don't add stock back)
   shiftId?: number; // Link transaction to a shift
+  discountAmount?: number; // Overall invoice discount
 }
 
 export interface Shift {

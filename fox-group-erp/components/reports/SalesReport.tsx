@@ -41,8 +41,8 @@ export const SalesReport: React.FC<SalesReportProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Chart */}
-        <div className="lg:col-span-2 min-h-[320px] bg-dark-900/50 rounded-lg p-4 border border-dark-800">
-          <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+        <div className="lg:col-span-2 bg-dark-900/50 rounded-lg p-4 border border-dark-800" style={{ height: '350px', minHeight: '320px' }}>
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
               <XAxis dataKey="date" stroke="#94a3b8" />

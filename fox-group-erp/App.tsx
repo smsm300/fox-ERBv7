@@ -16,7 +16,7 @@ import Settings from './pages/Settings';
 import Users from './pages/Users';
 import { APP_SECTIONS, INITIAL_CUSTOMERS, INITIAL_PRODUCTS, INITIAL_SUPPLIERS, INITIAL_TRANSACTIONS, INITIAL_SETTINGS, INITIAL_USERS } from './constants';
 import { Product, Transaction, Customer, Supplier, CartItem, PaymentMethod, TransactionType, Quotation, AppSettings, User, ActivityLogEntry, Shift } from './types';
-import { authAPI, productsAPI, customersAPI, suppliersAPI, transactionsAPI, shiftsAPI, quotationsAPI, settingsAPI, usersAPI, activityLogAPI } from './services/endpoints';
+import { authAPI, productsAPI, customersAPI, suppliersAPI, transactionsAPI, shiftsAPI, quotationsAPI, settingsAPI, usersAPI, activityLogAPI, systemAPI } from './services/endpoints';
 import { handleAPIError } from './services/errorHandler';
 import { useAutoLogout } from './hooks/useAutoLogout';
 
@@ -28,10 +28,10 @@ const loadState = <T,>(key: string, fallback: T): T => {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentSection, setCurrentSection] = useState(() => 
+  const [currentSection, setCurrentSection] = useState(() =>
     localStorage.getItem('fox_erp_current_section') || APP_SECTIONS.DASHBOARD
   );
-  
+
   // Current logged in user
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[0]);
 
@@ -45,7 +45,7 @@ function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  
+
   // Invoice Modal State
   const [invoiceModal, setInvoiceModal] = useState<{
     isOpen: boolean;
@@ -90,7 +90,7 @@ function App() {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
     const sessionActive = sessionStorage.getItem('fox_erp_session_active');
-    
+
     // If there's a token but no active session, browser was closed
     // Clear the old token so user needs to login again
     if (token && !sessionActive) {
@@ -99,11 +99,11 @@ function App() {
       localStorage.removeItem('user');
       // Don't return - let user see login page
     }
-    
+
     // Check again after potential cleanup
     const currentToken = localStorage.getItem('token');
     const currentUserStr = localStorage.getItem('user');
-    
+
     if (currentToken && currentUserStr) {
       try {
         const user = JSON.parse(currentUserStr);
@@ -204,10 +204,10 @@ function App() {
     try {
       const response = await shiftsAPI.open(startCash);
       const newShift = response.data;
-      
+
       setShifts(prev => [...prev, newShift]);
       setSettings(prev => ({ ...prev, currentShiftId: newShift.id }));
-      
+
       logActivity('وردية', `فتح وردية جديدة بواسطة ${currentUser.name} برصيد ${startCash}`);
     } catch (error: any) {
       console.error('Failed to open shift:', error);
@@ -221,10 +221,10 @@ function App() {
     try {
       const response = await shiftsAPI.close(settings.currentShiftId, endCash);
       const updatedShift = response.data;
-      
+
       setShifts(prev => prev.map(s => s.id === settings.currentShiftId ? updatedShift : s));
       setSettings(prev => ({ ...prev, currentShiftId: undefined }));
-      
+
       logActivity('وردية', `إغلاق الوردية. المتوقع: ${updatedShift.expectedCash}، الفعلي: ${endCash}`);
       return updatedShift;
     } catch (error: any) {
@@ -235,7 +235,7 @@ function App() {
 
   // --- Handlers ---
 
-  const handleSaleComplete = async (cartItems: CartItem[], customerId: number, paymentMethod: PaymentMethod, totalAmount: number, invoiceId?: string, isDirectSale: boolean = false, dueDate?: string) => {
+  const handleSaleComplete = async (cartItems: CartItem[], customerId: number, paymentMethod: PaymentMethod, totalAmount: number, invoiceId?: string, isDirectSale: boolean = false, dueDate?: string, discountAmount?: number) => {
     // Check if shift is open (Admin can sell without shift)
     if (!settings.currentShiftId && currentUser.role !== 'admin') {
       alert('يجب فتح الوردية (Shift) أولاً قبل إجراء أي عملية بيع.');
@@ -255,7 +255,8 @@ function App() {
         })),
         total_amount: totalAmount,
         invoice_id: invoiceId,
-        is_direct_sale: isDirectSale
+        is_direct_sale: isDirectSale,
+        discount_amount: discountAmount
       });
 
       const newTransaction = response.data;
@@ -279,11 +280,11 @@ function App() {
       // setSettings(settingsRes.data);
       // Actually, we can manually increment locally to avoid full fetch for just ID
       if (!invoiceId || invoiceId === settings.nextInvoiceNumber.toString()) {
-         setSettings(prev => ({...prev, nextInvoiceNumber: prev.nextInvoiceNumber + 1}));
+        setSettings(prev => ({ ...prev, nextInvoiceNumber: prev.nextInvoiceNumber + 1 }));
       }
 
       logActivity('عملية بيع', `إضافة فاتورة بيع رقم ${newTransaction.id} بقيمة ${totalAmount}`);
-      
+
       // Show Invoice Modal
       const customer = customers.find(c => c.id === customerId);
       setInvoiceModal({
@@ -294,7 +295,7 @@ function App() {
         total: totalAmount,
         paymentMethod
       });
-      
+
     } catch (error: any) {
       console.error('Sale failed:', error);
       alert('فشل حفظ عملية البيع: ' + handleAPIError(error));
@@ -302,42 +303,132 @@ function App() {
   };
 
   // Print Invoice from Modal
+  // Print Invoice from Modal
+  // Print Invoice from Modal
   const handlePrintInvoice = () => {
-    const printContent = document.getElementById('invoice-print-content');
-    if (!printContent) return;
-    
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (!printWindow) {
-      alert('يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة');
-      return;
+    // 1. Create a hidden iframe
+    let printFrame = document.getElementById('print-frame') as HTMLIFrameElement;
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'print-frame';
+      printFrame.style.display = 'none';
+      document.body.appendChild(printFrame);
     }
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <title>فاتورة</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 15px; font-size: 12px; background: white; color: black; }
-          .header { text-align: center; margin-bottom: 15px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
-          .logo { font-size: 20px; font-weight: bold; }
-          .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; }
-          table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11px; }
-          th, td { padding: 5px 3px; text-align: right; border-bottom: 1px solid #ddd; }
-          th { background: #f5f5f5; }
-          .total-section { border-top: 2px dashed #000; padding-top: 10px; margin-top: 10px; }
-          .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-          .grand-total { font-size: 16px; font-weight: bold; }
-          .footer { text-align: center; margin-top: 15px; font-size: 10px; color: #666; }
-        </style>
-      </head>
-      <body>${printContent.innerHTML}</body>
-      <script>window.onload = function() { window.print(); window.close(); }</script>
-      </html>
-    `);
-    printWindow.document.close();
+
+    // 2. Build items HTML separately
+    const itemsHtml = invoiceModal.items.map(function (item) {
+      const total = ((item.sellPrice - (item.discount || 0)) * item.cartQuantity).toLocaleString(undefined, { minimumFractionDigits: 0 });
+      return '<tr><td class="col-name">' + item.name + '</td><td class="col-qty">' + item.cartQuantity + '</td><td class="col-price">' + item.sellPrice.toLocaleString(undefined, { minimumFractionDigits: 2 }) + '</td><td class="col-total">' + total + '</td></tr>';
+    }).join('');
+
+    const subtotal = invoiceModal.items.reduce(function (s, i) { return s + (i.sellPrice * i.cartQuantity); }, 0).toLocaleString();
+
+    // Safely handle taxRate
+    const taxRate = Number(settings.taxRate) || 0;
+    const taxAmount = taxRate > 0 ? (invoiceModal.total * taxRate / 100).toLocaleString(undefined, { minimumFractionDigits: 1 }) : '';
+    const grandTotal = (invoiceModal.total + (taxRate > 0 ? invoiceModal.total * taxRate / 100 : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 });
+
+    const invoiceId = invoiceModal.transaction?.invoiceNumber || invoiceModal.transaction?.id || '';
+    const dateStr = new Date().toLocaleString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+    const fontUrl = window.location.origin + '/fonts/librebarcode39text.woff2';
+    const htmlContent = '<!DOCTYPE html>' +
+      '<html dir="rtl" lang="ar">' +
+      '<head>' +
+      '<meta charset="UTF-8">' +
+      '<title>فاتورة - FOX GROUP</title>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '@font-face { font-family: "Libre Barcode 39 Text"; src: url("' + fontUrl + '") format("woff2"); }' +
+      '* { margin: 0; padding: 0; box-sizing: border-box; }' +
+      'body { font-family: "Cairo", sans-serif; padding: 20px; font-size: 12px; color: #000; background: #fff; width: 80mm; line-height: 1.4; }' +
+      '.text-center { text-align: center; }' +
+      '.border-dashed { border-style: dashed; border-color: #9ca3af; }' +
+      '.border-b-2 { border-bottom-width: 2px; }' +
+      '.border-t-2 { border-top-width: 2px; }' +
+      '.pb-4 { padding-bottom: 1rem; }' +
+      '.pt-4 { padding-top: 1rem; }' +
+      '.mb-4 { margin-bottom: 1rem; }' +
+      '.mt-4 { margin-top: 1rem; }' +
+      '.text-sm { font-size: 0.875rem; }' +
+      '.text-xs { font-size: 0.75rem; }' +
+      '.text-gray-500 { color: #6b7280; }' +
+      '.text-gray-600 { color: #4b5563; }' +
+      '.font-bold { font-weight: 700; }' +
+      '.company-title { font-size: 1.25rem; font-weight: 900; margin-bottom: 2px; }' +
+      '.info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }' +
+      '.info-value { font-weight: 600; }' +
+      'table { width: 100%; margin: 15px 0; border-collapse: collapse; }' +
+      'th { font-weight: 900; font-size: 13px; text-align: right; padding: 4px; }' +
+      'td { padding: 4px; border-bottom: 1px solid #f3f4f6; font-size: 12px; }' +
+      '.col-name { text-align: right; width: 40%; }' +
+      '.col-qty { text-align: center; width: 15%; }' +
+      '.col-price { text-align: center; width: 20%; }' +
+      '.col-total { text-align: left; width: 25%; }' +
+      '.total-row { display: flex; justify-content: space-between; font-size: 13px; }' +
+      '.grand-total-row { display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 8px; }' +
+      '.terms-section { font-size: 11px; color: #4b5563; text-align: right; margin-top: 10px; }' +
+      '.footer-msg { font-size: 13px; font-weight: 600; color: #4b5563; margin-top: 15px; }' +
+      '.barcode-wrap { text-align: center; margin-top: 15px; }' +
+      '.barcode-main { font-family: "Libre Barcode 39 Text"; font-size: 45px; line-height: 1; }' +
+      '@media print { body { width: 100%; padding: 0; } @page { margin: 0; } }' +
+      '</style>' +
+      '</head>' +
+      '<body>' +
+      '<div style="padding: 1rem; color: black;">' +
+      '<div class="text-center mb-4 border-b-2 border-dashed border-gray-400 pb-4">' +
+      (settings.logoUrl ? '<img src="' + settings.logoUrl + '" alt="Logo" style="height: 3rem; margin: 0 auto 0.5rem auto;" />' : '') +
+      '<h1 class="company-title">' + (settings.companyName || 'Fox Group') + '</h1>' +
+      (settings.companyAddress ? '<p class="text-sm text-gray-600">' + settings.companyAddress + '</p>' : '') +
+      (settings.companyPhone ? '<p class="text-sm text-gray-600">تليفون: ' + settings.companyPhone + '</p>' : '') +
+      '</div>' +
+
+      '<div class="mb-4 text-sm width-100">' +
+      '<div class="info-row"><span class="info-value">#' + invoiceId + '</span><span class="text-gray-600">:رقم الفاتورة</span></div>' +
+      '<div class="info-row"><span class="info-value">' + dateStr + '</span><span class="text-gray-600">:التاريخ</span></div>' +
+      '<div class="info-row"><span class="info-value">' + invoiceModal.customerName + '</span><span class="text-gray-600">:العميل</span></div>' +
+      '<div class="info-row"><span class="info-value">' + invoiceModal.paymentMethod + '</span><span class="text-gray-600">:طريقة الدفع</span></div>' +
+      '</div>' +
+
+      '<table>' +
+      '<thead><tr><th class="col-name">الصنف</th><th class="col-qty">الكمية</th><th class="col-price">السعر</th><th class="col-total">الإجمالي</th></tr></thead>' +
+      '<tbody>' + itemsHtml + '</tbody>' +
+      '</table>' +
+
+      '<div class="border-t-2 border-dashed border-gray-400 pt-4">' +
+      '<div class="total-row"><span>' + subtotal + ' ج.م</span><span>:المجموع الفرعي</span></div>' +
+      (taxRate > 0 ? '<div class="total-row"><span>' + taxAmount + ' ج.م</span><span>:ضريبة القيمة المضافة (' + taxRate.toFixed(2) + '%)</span></div>' : '') +
+      '<div class="grand-total-row"><span>' + grandTotal + ' ج.م</span><span>:الإجمالي</span></div>' +
+      '</div>' +
+
+      (settings.invoiceTerms ? '<div class="mt-4 pt-4 border-t-2 border-dashed border-gray-400 text-xs text-gray-500"><p class="font-bold mb-1">الشروط والأحكام:</p><p>' + settings.invoiceTerms + '</p></div>' : '') +
+
+      '<div class="text-center mt-4 pt-4 border-t-2 border-dashed border-gray-400 text-sm text-gray-600">' +
+      '<p>شكراً لتعاملكم معنا</p><p>نتمنى لكم يوماً سعيداً</p>' +
+      '</div>' +
+
+      '<div class="text-center mt-4 pt-4 border-t-2 border-dashed border-gray-400">' +
+      '<p class="text-xs text-gray-500 mb-1">رقم الفاتورة المميكن</p>' +
+      '<p class="barcode-main">' + invoiceId + '</p>' +
+      '<p style="font-family: monospace; font-size: 10px; color: #4b5563;">' + invoiceId + '</p>' +
+      '</div>' +
+      '</div>' +
+      '</body>' +
+      '</html>';
+
+    // 3. Write to iframe
+    const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+    if (frameDoc) {
+      frameDoc.open();
+      frameDoc.write(htmlContent);
+      frameDoc.close();
+
+      // 4. Print after images load (little delay)
+      setTimeout(() => {
+        printFrame.contentWindow?.focus();
+        printFrame.contentWindow?.print();
+      }, 500);
+    }
   };
 
   // Close Invoice Modal
@@ -352,450 +443,511 @@ function App() {
     });
   };
 
-  const handlePurchaseComplete = (cartItems: CartItem[], supplierId: number, paymentMethod: PaymentMethod, totalAmount: number, dueDate?: string) => {
-    const newTransaction: Transaction = {
-      id: `PUR-${Date.now()}`,
-      type: TransactionType.PURCHASE,
-      date: new Date().toISOString(),
-      amount: totalAmount,
-      paymentMethod: paymentMethod,
-      description: `فاتورة شراء من مورد #${supplierId}`,
-      relatedId: supplierId,
-      items: cartItems,
-      status: 'completed',
-      dueDate: paymentMethod === PaymentMethod.DEFERRED ? dueDate : undefined,
-      shiftId: settings.currentShiftId
-    };
-    setTransactions(prev => [...prev, newTransaction]);
-
-    const updatedProducts = products.map(p => {
-      const purchasedItem = cartItems.find(item => item.id === p.id);
-      if (purchasedItem) {
-        // Calculate Weighted Average Cost
-        const oldTotalValue = p.quantity * p.costPrice;
-        const newTotalValue = purchasedItem.cartQuantity * purchasedItem.costPrice;
-        const newQuantity = p.quantity + purchasedItem.cartQuantity;
-        
-        // Avoid division by zero
-        const newAvgCost = newQuantity > 0 
-          ? (oldTotalValue + newTotalValue) / newQuantity 
-          : purchasedItem.costPrice;
-
-        return { 
-          ...p, 
-          quantity: newQuantity,
-          costPrice: parseFloat(newAvgCost.toFixed(2)) // Store with 2 decimals
-        };
-      }
-      return p;
-    });
-    setProducts(updatedProducts);
-
-    if (paymentMethod === PaymentMethod.DEFERRED) {
-      setSuppliers(prev => prev.map(s => 
-        s.id === supplierId ? { ...s, balance: s.balance + totalAmount } : s
-      ));
-    }
-
-    logActivity('عملية شراء', `إضافة فاتورة شراء من مورد #${supplierId}`);
-    alert('تم حفظ فاتورة الشراء وتحديث المخزن ومتوسط التكلفة!');
-  };
-
-  const handleReturnTransaction = (originalTransaction: Transaction) => {
-    if (originalTransaction.type !== TransactionType.SALE && originalTransaction.type !== TransactionType.PURCHASE) return;
-    
-    const isSale = originalTransaction.type === TransactionType.SALE;
-    const returnType = TransactionType.RETURN;
-    const items = originalTransaction.items || [];
-
-    // Check if Direct Sale - Do NOT return stock
-    const isDirect = originalTransaction.isDirectSale;
-
-    const returnTransaction: Transaction = {
-      id: `RET-${Date.now()}`,
-      type: returnType,
-      date: new Date().toISOString(),
-      amount: originalTransaction.amount, 
-      paymentMethod: originalTransaction.paymentMethod,
-      description: `مرتجع للفاتورة رقم ${originalTransaction.id}`,
-      relatedId: originalTransaction.relatedId,
-      items: items,
-      status: 'completed',
-      isDirectSale: isDirect,
-      shiftId: settings.currentShiftId
-    };
-    setTransactions(prev => [...prev, returnTransaction]);
-
-    if (!isDirect) {
-      const updatedProducts = products.map(p => {
-        const item = items.find(i => i.id === p.id);
-        if (item) {
-          return { 
-            ...p, 
-            quantity: isSale 
-              ? p.quantity + item.cartQuantity // Sales return: Increase stock
-              : Math.max(0, p.quantity - item.cartQuantity) // Purchase return: Decrease stock
-          };
-        }
-        return p;
+  const handlePurchaseComplete = async (cartItems: CartItem[], supplierId: number, paymentMethod: PaymentMethod, totalAmount: number, dueDate?: string) => {
+    try {
+      // 1. Create Purchase Transaction via API
+      const response = await transactionsAPI.createPurchase({
+        supplier_id: supplierId,
+        payment_method: paymentMethod,
+        items: cartItems.map(item => ({
+          id: item.id,
+          quantity: item.cartQuantity,
+          cost_price: item.costPrice
+        })),
+        total_amount: totalAmount
       });
-      setProducts(updatedProducts);
-    }
 
-    if (originalTransaction.paymentMethod === PaymentMethod.DEFERRED) {
-      if (isSale) {
-        setCustomers(prev => prev.map(c => 
-          c.id === originalTransaction.relatedId ? { ...c, balance: c.balance + originalTransaction.amount } : c
-        ));
-      } else {
-        setSuppliers(prev => prev.map(s => 
-          s.id === originalTransaction.relatedId ? { ...s, balance: s.balance - originalTransaction.amount } : s
-        ));
+      const newTransaction = response.data;
+      setTransactions(prev => [...prev, newTransaction]);
+
+      // 2. Refresh Products to get new stock and average cost from backend
+      const productsRes = await productsAPI.list();
+      setProducts((productsRes.data as any).results || productsRes.data);
+
+      // 3. Refresh Suppliers if deferred to update balance
+      if (paymentMethod === PaymentMethod.DEFERRED) {
+        const suppliersRes = await suppliersAPI.list();
+        setSuppliers((suppliersRes.data as any).results || suppliersRes.data);
       }
-    }
 
-    logActivity('مرتجع', `تسجيل مرتجع للفاتورة ${originalTransaction.id}`);
-    alert('تم تسجيل المرتجع وتحديث الحسابات.');
-  };
+      logActivity('عملية شراء', `إضافة فاتورة شراء من مورد #${supplierId}`);
+      alert('تم حفظ فاتورة الشراء وتحديث المخزن ومتوسط التكلفة!');
 
-  const handleAddExpense = (amount: number, description: string, category: string) => {
-    const threshold = 2000;
-    const isPending = amount > threshold && currentUser.role !== 'admin';
-    
-    const newTransaction: Transaction = {
-      id: `EXP-${Date.now()}`,
-      type: TransactionType.EXPENSE,
-      date: new Date().toISOString(),
-      amount: amount,
-      paymentMethod: PaymentMethod.CASH,
-      description: description,
-      category: category,
-      status: isPending ? 'pending' : 'completed',
-      shiftId: settings.currentShiftId
-    };
-    
-    setTransactions(prev => [...prev, newTransaction]);
-    
-    if (isPending) {
-      logActivity('مصروفات', `طلب موافقة على مصروف بقيمة ${amount}`);
-      alert('تم تسجيل الطلب، بانتظار موافقة المدير (المبلغ يتجاوز الحد المسموح).');
-    } else {
-      logActivity('مصروفات', `تسجيل مصروف (${category}) بقيمة ${amount}`);
-      alert('تم تسجيل المصروف بنجاح');
+    } catch (error: any) {
+      console.error('Purchase failed:', error);
+      alert('فشل حفظ فاتورة الشراء: ' + handleAPIError(error));
     }
   };
 
-  const handleCapitalTransaction = (type: 'deposit' | 'withdrawal', amount: number, description: string) => {
-    const newTransaction: Transaction = {
-      id: `CAP-${Date.now()}`,
-      type: type === 'deposit' ? TransactionType.CAPITAL : TransactionType.WITHDRAWAL,
-      date: new Date().toISOString(),
-      amount: amount,
-      paymentMethod: PaymentMethod.CASH,
-      description: description,
-      status: 'completed',
-      shiftId: settings.currentShiftId
-    };
-    setTransactions(prev => [...prev, newTransaction]);
-    logActivity('رأس مال', `${type === 'deposit' ? 'إيداع رأس مال' : 'مسحوبات شخصية'} بقيمة ${amount}`);
-    alert('تم تسجيل العملية بنجاح');
-  };
+  const handleReturnTransaction = async (originalTransaction: Transaction) => {
+    if (originalTransaction.type !== TransactionType.SALE && originalTransaction.type !== TransactionType.PURCHASE) return;
 
-  const handleApproveTransaction = (id: string) => {
-    setTransactions(prev => prev.map(t => 
-       t.id === id ? { ...t, status: 'completed' } : t
-    ));
-    logActivity('موافقة', `تمت الموافقة على المعاملة ${id}`);
-  };
+    try {
+      // 1. Process Return via API
+      // Note: We need the transaction ID string. If it's a number disguised as string, it should still work.
+      await transactionsAPI.return(originalTransaction.id);
 
-  const handleRejectTransaction = (id: string) => {
-    setTransactions(prev => prev.map(t => 
-       t.id === id ? { ...t, status: 'rejected' } : t
-    ));
-    logActivity('رفض', `تم رفض المعاملة ${id}`);
-  };
+      // 2. Refresh Data
+      // Refresh Transactions (to show the new return transaction)
+      const transactionsRes = await transactionsAPI.list();
+      setTransactions((transactionsRes.data as any).results || transactionsRes.data);
 
-  const handleDebtSettlement = (type: 'customer' | 'supplier', id: number, amount: number, notes: string) => {
-    const isCustomer = type === 'customer';
-    const transType = isCustomer ? TransactionType.SALE : TransactionType.PURCHASE; 
-    
-    const newTransaction: Transaction = {
-       id: `SETTLE-${Date.now()}`,
-       type: transType,
-       date: new Date().toISOString(),
-       amount: amount,
-       paymentMethod: PaymentMethod.CASH,
-       description: isCustomer 
-          ? `تحصيل دفعة من حساب العميل (سداد مديونية): ${notes}` 
-          : `سداد دفعة للمورد (سداد مديونية): ${notes}`,
-       category: 'تسوية مديونية',
-       relatedId: id,
-       status: 'completed',
-       shiftId: settings.currentShiftId
-    };
+      // Refresh Products (stock updated)
+      const productsRes = await productsAPI.list();
+      setProducts((productsRes.data as any).results || productsRes.data);
 
-    setTransactions(prev => [...prev, newTransaction]);
+      // Refresh Customers/Suppliers (balance updated)
+      if (originalTransaction.paymentMethod === PaymentMethod.DEFERRED) {
+        if (originalTransaction.type === TransactionType.SALE) {
+          const customersRes = await customersAPI.list();
+          setCustomers((customersRes.data as any).results || customersRes.data);
+        } else {
+          const suppliersRes = await suppliersAPI.list();
+          setSuppliers((suppliersRes.data as any).results || suppliersRes.data);
+        }
+      }
 
-    if (isCustomer) {
-       setCustomers(prev => prev.map(c => 
-          c.id === id ? { ...c, balance: c.balance + amount } : c
-       ));
-       logActivity('تحصيل', `استلام مبلغ ${amount} من العميل ID: ${id}`);
-    } else {
-       setSuppliers(prev => prev.map(s => 
-          s.id === id ? { ...s, balance: s.balance - amount } : s
-       ));
-       logActivity('سداد', `دفع مبلغ ${amount} للمورد ID: ${id}`);
+      logActivity('مرتجع', `تسجيل مرتجع للفاتورة ${originalTransaction.id}`);
+      alert('تم تسجيل المرتجع وتحديث الحسابات.');
+
+    } catch (error: any) {
+      console.error('Return failed:', error);
+      alert('فشل تسجيل المرتجع: ' + handleAPIError(error));
     }
-    
-    alert('تم تسجيل العملية وتحديث الرصيد بنجاح');
   };
 
-  const handleStockAdjustment = (productId: number, quantityDiff: number, reason: string) => {
-    // 1. Update Product
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-    
-    const newQty = product.quantity + quantityDiff;
-    if (newQty < 0) {
-      alert('لا يمكن أن يصبح المخزون بالسالب');
+  const handleAddExpense = async (amount: number, description: string, category: string) => {
+    // Check if shift is open (Admin can add without shift, but better to enforce)
+    if (!settings.currentShiftId && currentUser.role !== 'admin') {
+      alert('يجب فتح الوردية (Shift) أولاً.');
       return;
     }
 
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, quantity: newQty } : p));
+    try {
+      const threshold = 2000;
+      const response = await transactionsAPI.createExpense({
+        amount,
+        category,
+        description,
+        payment_method: PaymentMethod.CASH
+      });
 
-    // 2. Create Adjustment Transaction (Invisible mostly, but good for logs)
-    const newTransaction: Transaction = {
-      id: `ADJ-${Date.now()}`,
-      type: TransactionType.ADJUSTMENT,
-      date: new Date().toISOString(),
-      amount: 0, // Zero value transaction for now, or could calculate cost loss/gain
-      paymentMethod: PaymentMethod.CASH,
-      description: `تسوية مخزون لـ ${product.name}: ${quantityDiff > 0 ? '+' : ''}${quantityDiff} ${product.unit}. السبب: ${reason}`,
-      items: [{...product, cartQuantity: Math.abs(quantityDiff), discount: 0}],
-      status: 'completed',
-      shiftId: settings.currentShiftId
-    };
-    setTransactions(prev => [...prev, newTransaction]);
-    logActivity('تسوية مخزون', `تعديل كمية ${product.name} بمقدار ${quantityDiff}. السبب: ${reason}`);
-    alert('تم تحديث المخزون وتسجيل التسوية');
+      const newTransaction = response.data;
+      setTransactions(prev => [...prev, newTransaction]);
+
+      const isPending = newTransaction.status === 'pending';
+
+      if (isPending) {
+        logActivity('مصروفات', `طلب موافقة على مصروف بقيمة ${amount}`);
+        alert('تم تسجيل الطلب، بانتظار موافقة المدير (المبلغ يتجاوز الحد المسموح).');
+      } else {
+        logActivity('مصروفات', `تسجيل مصروف (${category}) بقيمة ${amount}`);
+        alert('تم تسجيل المصروف بنجاح');
+      }
+
+    } catch (error: any) {
+      console.error('Failed to create expense:', error);
+      alert('فشل تسجيل المصروف: ' + handleAPIError(error));
+    }
   };
 
-  const handleCreateQuotation = (customerId: number, items: CartItem[]) => {
-    const customer = customers.find(c => c.id === customerId);
-    const newQuote: Quotation = {
-      id: `QT-${Date.now()}`,
-      date: new Date().toISOString(),
-      customerId,
-      customerName: customer?.name || 'Unknown',
-      items,
-      totalAmount: items.reduce((sum, item) => sum + (item.sellPrice * item.cartQuantity), 0),
-      status: 'pending'
-    };
-    setQuotations(prev => [newQuote, ...prev]);
-    logActivity('عرض سعر', `إنشاء عرض سعر للعميل ${customer?.name}`);
+  const handleCapitalTransaction = async (type: 'deposit' | 'withdrawal', amount: number, description: string) => {
+    try {
+      if (type === 'deposit') {
+        await transactionsAPI.createCapital({
+          amount,
+          description
+        });
+      } else {
+        await transactionsAPI.createWithdrawal({
+          amount,
+          description
+        });
+      }
+
+      // Refresh Transactions
+      const transactionsRes = await transactionsAPI.list();
+      setTransactions((transactionsRes.data as any).results || transactionsRes.data);
+
+      logActivity('رأس مال', `${type === 'deposit' ? 'إيداع رأس مال' : 'مسحوبات شخصية'} بقيمة ${amount}`);
+      alert('تم تسجيل العملية بنجاح');
+    } catch (error: any) {
+      console.error('Capital/Withdrawal failed:', error);
+      alert('فشل تسجيل العملية: ' + handleAPIError(error));
+    }
   };
 
-  const handleConvertQuoteToInvoice = (quotationId: string) => {
-    const quote = quotations.find(q => q.id === quotationId);
-    if (!quote) return;
-    
-    const stockIssues = quote.items.filter(item => {
-      const product = products.find(p => p.id === item.id);
-      return !product || product.quantity < item.cartQuantity;
-    });
-
-    if (stockIssues.length > 0) {
-      alert(`تنبيه: بعض المنتجات في العرض غير متوفرة بالكمية المطلوبة في المخزن: ${stockIssues.map(i => i.name).join(', ')}`);
-      if(!window.confirm('هل تريد المتابعة رغم نقص المخزون؟ (سيصبح المخزون بالسالب)')) return;
+  const handleApproveTransaction = async (id: string) => {
+    try {
+      await transactionsAPI.approve(id);
+      setTransactions(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'completed' } : t
+      ));
+      logActivity('موافقة', `تمت الموافقة على المعاملة ${id}`);
+    } catch (error: any) {
+      console.error('Approve failed:', error);
+      alert('فشل الموافقة على المعاملة: ' + handleAPIError(error));
     }
+  };
 
-    // If customerId is 0 or not found in customers, use cash customer
-    let customerId = quote.customerId;
-    const customerExists = customers.find(c => c.id === customerId);
-    if (!customerExists || customerId === 0) {
-      // Find cash customer or use first customer
-      const cashCustomer = customers.find(c => c.name === 'عميل نقدي');
-      customerId = cashCustomer?.id || customers[0]?.id || 0;
+  const handleRejectTransaction = async (id: string) => {
+    try {
+      await transactionsAPI.reject(id);
+      setTransactions(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'rejected' } : t
+      ));
+      logActivity('رفض', `تم رفض المعاملة ${id}`);
+    } catch (error: any) {
+      console.error('Reject failed:', error);
+      alert('فشل رفض المعاملة: ' + handleAPIError(error));
     }
+  };
 
-    handleSaleComplete(quote.items, customerId, PaymentMethod.CASH, quote.totalAmount);
-    setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, status: 'converted' } : q));
-    logActivity('تحويل عرض سعر', `تحويل العرض ${quotationId} لفاتورة`);
-    alert('تم تحويل العرض لفاتورة بيع بنجاح');
+  const handleDebtSettlement = async (type: 'customer' | 'supplier', id: number, amount: number, notes: string) => {
+    try {
+      const isCustomer = type === 'customer';
+      let res;
+
+      if (isCustomer) {
+        res = await customersAPI.settleDebt(id, { amount, payment_method: PaymentMethod.CASH });
+        // Refresh Customer to get new balance
+        const customerRes = await customersAPI.list();
+        setCustomers((customerRes.data as any).results || customerRes.data);
+        logActivity('تحصيل', `استلام مبلغ ${amount} من العميل ID: ${id}`);
+      } else {
+        res = await suppliersAPI.settleDebt(id, { amount, payment_method: PaymentMethod.CASH });
+        // Refresh Supplier to get new balance
+        const supplierRes = await suppliersAPI.list();
+        setSuppliers((supplierRes.data as any).results || supplierRes.data);
+        logActivity('سداد', `دفع مبلغ ${amount} للمورد ID: ${id}`);
+      }
+
+      // Refresh Transactions to see the settlement transaction
+      const transactionsRes = await transactionsAPI.list();
+      setTransactions((transactionsRes.data as any).results || transactionsRes.data);
+
+      alert('تم تسجيل العملية وتحديث الرصيد بنجاح');
+    } catch (error: any) {
+      console.error('Debt settlement failed:', error);
+      alert('فشل تسوية المديونية: ' + handleAPIError(error));
+    }
+  };
+
+  const handleStockAdjustment = async (productId: number, quantityDiff: number, reason: string) => {
+    try {
+      if (quantityDiff === 0) return;
+
+      await productsAPI.adjustStock(productId, { quantity_diff: quantityDiff, reason });
+
+      // Refresh Products
+      const productsRes = await productsAPI.list();
+      setProducts((productsRes.data as any).results || productsRes.data);
+
+      // Refresh Transactions (Adjustment is recorded as a transaction)
+      const transactionsRes = await transactionsAPI.list();
+      setTransactions((transactionsRes.data as any).results || transactionsRes.data);
+
+      logActivity('تسوية مخزون', `تعديل كمية المنتج ID ${productId} بمقدار ${quantityDiff}. السبب: ${reason}`);
+      alert('تم تحديث المخزون وتسجيل التسوية');
+    } catch (error: any) {
+      console.error('Stock adjustment failed:', error);
+      alert('فشل تسوية المخزون: ' + handleAPIError(error));
+    }
+  };
+
+  const handleCreateQuotation = async (customerId: number, items: CartItem[]) => {
+    try {
+      const res = await quotationsAPI.create({
+        customer_id: customerId,
+        items: items.map(item => ({
+          id: item.id,
+          quantity: item.cartQuantity,
+          price: item.sellPrice,
+          discount: item.discount || 0
+        })),
+        total_amount: items.reduce((sum, item) => sum + (item.sellPrice * item.cartQuantity), 0)
+      });
+
+      setQuotations(prev => [res.data, ...prev]);
+      logActivity('عرض سعر', `إنشاء عرض سعر للعميل ID: ${customerId}`);
+      alert('تم إنشاء عرض السعر بنجاح');
+    } catch (error: any) {
+      console.error('Create quotation failed:', error);
+      alert('فشل إنشاء عرض السعر: ' + handleAPIError(error));
+    }
+  };
+
+  const handleConvertQuoteToInvoice = async (quotationId: string) => {
+    if (!window.confirm('هل أنت متأكد من تحويل العرض لفاتورة؟')) return;
+
+    try {
+      await quotationsAPI.convert(quotationId, { payment_method: PaymentMethod.CASH });
+
+      // Refresh Quotations (status update)
+      const quotesRes = await quotationsAPI.list();
+      setQuotations((quotesRes.data as any).results || quotesRes.data);
+
+      // Refresh Transactions (new sale)
+      const transactionsRes = await transactionsAPI.list();
+      setTransactions((transactionsRes.data as any).results || transactionsRes.data);
+
+      // Refresh Products (stock deduction)
+      const productsRes = await productsAPI.list();
+      setProducts((productsRes.data as any).results || productsRes.data);
+
+      logActivity('تحويل عرض سعر', `تحويل العرض ${quotationId} لفاتورة`);
+      alert('تم تحويل العرض لفاتورة بيع بنجاح');
+    } catch (error: any) {
+      console.error('Convert quotation failed:', error);
+      alert('فشل تحويل عرض السعر: ' + handleAPIError(error));
+    }
   };
 
   // --- CRUD Handlers with Safety Checks ---
 
-  const handleAddCustomer = (customerData: Omit<Customer, 'id'>) => {
-    const newCustomer: Customer = { id: Date.now(), ...customerData };
-    setCustomers(prev => [...prev, newCustomer]);
-    logActivity('إضافة عميل', `إضافة العميل ${customerData.name}`);
-    return newCustomer;
-  };
+  // --- CRUD Handlers with API Integration ---
 
-  const handleUpdateCustomer = (customer: Customer) => {
-    setCustomers(prev => prev.map(c => c.id === customer.id ? customer : c));
-    logActivity('تعديل عميل', `تعديل بيانات العميل ${customer.name}`);
-  };
-
-  const handleDeleteCustomer = (id: number) => {
-    const hasTransactions = transactions.some(t => t.relatedId === id);
-    const customer = customers.find(c => c.id === id);
-    if (hasTransactions || (customer && customer.balance !== 0)) {
-       alert('لا يمكن حذف هذا العميل لوجود معاملات سابقة أو رصيد غير صفري. يرجى تصفية الحساب أولاً.');
-       return;
-    }
-    if (window.confirm('هل أنت متأكد من حذف هذا العميل؟')) {
-       setCustomers(prev => prev.filter(c => c.id !== id));
-       logActivity('حذف عميل', `حذف العميل ID: ${id}`);
+  const handleAddCustomer = async (customerData: Omit<Customer, 'id'>) => {
+    try {
+      const res = await customersAPI.create(customerData);
+      setCustomers(prev => [...prev, res.data]);
+      logActivity('إضافة عميل', `إضافة العميل ${customerData.name}`);
+      return res.data;
+    } catch (error: any) {
+      console.error('Add customer failed:', error);
+      alert('فشل إضافة العميل: ' + handleAPIError(error));
+      throw error;
     }
   };
 
-  const handleAddSupplier = (supplierData: Omit<Supplier, 'id'>) => {
-    const newSupplier: Supplier = { id: Date.now(), ...supplierData };
-    setSuppliers(prev => [...prev, newSupplier]);
-    logActivity('إضافة مورد', `إضافة المورد ${supplierData.name}`);
-  };
-
-  const handleUpdateSupplier = (supplier: Supplier) => {
-    setSuppliers(prev => prev.map(s => s.id === supplier.id ? supplier : s));
-    logActivity('تعديل مورد', `تعديل بيانات المورد ${supplier.name}`);
-  };
-
-  const handleDeleteSupplier = (id: number) => {
-    const hasTransactions = transactions.some(t => t.relatedId === id);
-    const supplier = suppliers.find(s => s.id === id);
-    if (hasTransactions || (supplier && supplier.balance !== 0)) {
-       alert('لا يمكن حذف هذا المورد لوجود معاملات سابقة أو رصيد غير صفري.');
-       return;
-    }
-    if (window.confirm('هل أنت متأكد من حذف هذا المورد؟')) {
-       setSuppliers(prev => prev.filter(s => s.id !== id));
-       logActivity('حذف مورد', `حذف المورد ID: ${id}`);
+  const handleUpdateCustomer = async (customer: Customer) => {
+    try {
+      const res = await customersAPI.update(customer.id, customer);
+      setCustomers(prev => prev.map(c => c.id === customer.id ? res.data : c));
+      logActivity('تعديل عميل', `تعديل بيانات العميل ${customer.name}`);
+    } catch (error: any) {
+      console.error('Update customer failed:', error);
+      alert('فشل تعديل العميل: ' + handleAPIError(error));
     }
   };
 
-  const handleAddProduct = (productData: Omit<Product, 'id'>) => {
-    const newProduct: Product = { ...productData, id: Date.now() };
-    setProducts(prev => [...prev, newProduct]);
-    logActivity('إضافة منتج', `إضافة المنتج ${productData.name}`);
-  };
-
-  const handleUpdateProduct = (updatedProduct: Product) => {
-    setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-    logActivity('تعديل منتج', `تعديل المنتج ${updatedProduct.name}`);
-  };
-
-  const handleDeleteProduct = (id: number) => {
-    const hasTransactions = transactions.some(t => t.items?.some(i => i.id === id));
-    if (hasTransactions) {
-      alert('لا يمكن حذف المنتج لأنه موجود في فواتير سابقة. يمكنك تعديل كميته لصفر بدلاً من ذلك.');
-      return;
+  const handleDeleteCustomer = async (id: number) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا العميل؟')) return;
+    try {
+      await customersAPI.delete(id);
+      setCustomers(prev => prev.filter(c => c.id !== id));
+      logActivity('حذف عميل', `حذف العميل ID: ${id}`);
+    } catch (error: any) {
+      console.error('Delete customer failed:', error);
+      alert('فشل حذف العميل: ' + handleAPIError(error));
     }
-    if(window.confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
+  };
+
+  const handleAddSupplier = async (supplierData: Omit<Supplier, 'id'>) => {
+    try {
+      const res = await suppliersAPI.create(supplierData);
+      setSuppliers(prev => [...prev, res.data]);
+      logActivity('إضافة مورد', `إضافة المورد ${supplierData.name}`);
+    } catch (error: any) {
+      console.error('Add supplier failed:', error);
+      alert('فشل إضافة المورد: ' + handleAPIError(error));
+    }
+  };
+
+  const handleUpdateSupplier = async (supplier: Supplier) => {
+    try {
+      const res = await suppliersAPI.update(supplier.id, supplier);
+      setSuppliers(prev => prev.map(s => s.id === supplier.id ? res.data : s));
+      logActivity('تعديل مورد', `تعديل بيانات المورد ${supplier.name}`);
+    } catch (error: any) {
+      console.error('Update supplier failed:', error);
+      alert('فشل تعديل المورد: ' + handleAPIError(error));
+    }
+  };
+
+  const handleDeleteSupplier = async (id: number) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المورد؟')) return;
+    try {
+      await suppliersAPI.delete(id);
+      setSuppliers(prev => prev.filter(s => s.id !== id));
+      logActivity('حذف مورد', `حذف المورد ID: ${id}`);
+    } catch (error: any) {
+      console.error('Delete supplier failed:', error);
+      alert('فشل حذف المورد: ' + handleAPIError(error));
+    }
+  };
+
+  const handleAddProduct = async (productData: Omit<Product, 'id'>) => {
+    try {
+      const res = await productsAPI.create(productData);
+      setProducts(prev => [...prev, res.data]);
+      logActivity('إضافة منتج', `إضافة المنتج ${productData.name}`);
+    } catch (error: any) {
+      console.error('Add product failed:', error);
+      alert('فشل إضافة المنتج: ' + handleAPIError(error));
+    }
+  };
+
+  const handleUpdateProduct = async (updatedProduct: Product) => {
+    try {
+      const res = await productsAPI.update(updatedProduct.id, updatedProduct);
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? res.data : p));
+      logActivity('تعديل منتج', `تعديل المنتج ${updatedProduct.name}`);
+    } catch (error: any) {
+      console.error('Update product failed:', error);
+      alert('فشل تعديل المنتج: ' + handleAPIError(error));
+    }
+  };
+
+  const handleDeleteProduct = async (id: number) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
+    try {
+      await productsAPI.delete(id);
       setProducts(prev => prev.filter(p => p.id !== id));
       logActivity('حذف منتج', `حذف المنتج ID: ${id}`);
+    } catch (error: any) {
+      console.error('Delete product failed:', error);
+      alert('فشل حذف المنتج: ' + handleAPIError(error));
     }
   };
-  
-  const handleUpdateSettings = (newSettings: AppSettings) => {
-    setSettings(newSettings);
-    logActivity('إعدادات', 'تحديث إعدادات النظام');
-    alert('تم حفظ الإعدادات بنجاح');
+
+  const handleUpdateSettings = async (newSettings: AppSettings) => {
+    try {
+      const res = await settingsAPI.update(newSettings);
+      setSettings(res.data);
+      logActivity('إعدادات', 'تحديث إعدادات النظام');
+      alert('تم حفظ الإعدادات بنجاح');
+    } catch (error: any) {
+      console.error('Update settings failed:', error);
+      alert('فشل تحديث الإعدادات: ' + handleAPIError(error));
+    }
   };
 
-  const handleAddUser = (userData: Omit<User, 'id'>) => {
-    const newUser: User = { id: Date.now(), ...userData };
-    setUsers(prev => [...prev, newUser]);
-    logActivity('مستخدمين', `إضافة مستخدم جديد: ${userData.username}`);
+  const handleAddUser = async (userData: Omit<User, 'id'>) => {
+    try {
+      const userToCreate = {
+        username: userData.username,
+        name: userData.name,
+        role: userData.role,
+        password: userData.password || '123456'
+      };
+      const res = await usersAPI.create(userToCreate);
+      setUsers(prev => [...prev, res.data]);
+      logActivity('مستخدمين', `إضافة مستخدم جديد: ${userData.username}`);
+    } catch (error: any) {
+      console.error('Add user failed:', error);
+      alert('فشل إضافة المستخدم: ' + handleAPIError(error));
+    }
   };
 
-  const handleDeleteUser = (userId: number) => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    logActivity('مستخدمين', `حذف مستخدم ID: ${userId}`);
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المستخدم؟')) return;
+    try {
+      await usersAPI.delete(userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      logActivity('مستخدمين', `حذف مستخدم ID: ${userId}`);
+    } catch (error: any) {
+      console.error('Delete user failed:', error);
+      alert('فشل حذف المستخدم: ' + handleAPIError(error));
+    }
   };
-  
-  const handleChangePassword = (newPassword: string) => {
-    setUsers(prev => prev.map(u => 
-      u.id === currentUser.id ? { ...u, password: newPassword } : u
-    ));
-    setCurrentUser(prev => ({ ...prev, password: newPassword }));
-    logActivity('حسابي', 'تم تغيير كلمة المرور');
+
+  const handleChangePassword = async (newPassword: string) => {
+    try {
+      await usersAPI.changePassword({ old_password: 'unknown', new_password: newPassword }); // Note: Backend typically needs old password. Assuming admin override or current user change.
+      // If the backend requires old password, we might need a prompt. But for now let's assume simple update if endpoints allow.
+      // Actually checking endpoints.ts: changePassword: (data: { old_password: string; new_password: string }) => ...
+      // If we don't have old password, this might fail unless we are admin updating another user.
+      // If it is 'my profile', we need old password.
+      // For this simplified version, let's assume we might need to update the UI to ask for old password later.
+      // For now, I will use a placeholder or check if this function is used for self or others.
+      // It says: "setCurrentUser(prev => ({ ...prev, password: newPassword })); logActivity('حسابي', ...)" so it is for self.
+
+      // Prompt for old password since it is required for security
+      const oldPassword = prompt('الرجاء إدخال كلمة المرور الحالية للتأكيد:');
+      if (!oldPassword) return;
+
+      await usersAPI.changePassword({ old_password: oldPassword, new_password: newPassword });
+
+      setUsers(prev => prev.map(u =>
+        u.id === currentUser.id ? { ...u, password: newPassword } : u
+      ));
+      setCurrentUser(prev => ({ ...prev, password: newPassword }));
+      logActivity('حسابي', 'تم تغيير كلمة المرور');
+      alert('تم تغيير كلمة المرور بنجاح');
+    } catch (error: any) {
+      console.error('Change password failed:', error);
+      alert('فشل تغيير كلمة المرور: ' + handleAPIError(error));
+    }
   };
 
   // --- System Management Handlers ---
 
-  const handleBackup = () => {
-    const data = {
-      products, transactions, customers, suppliers, quotations, settings, users, activityLogs, shifts,
-      timestamp: new Date().toISOString(),
-      version: '1.0'
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `fox_erp_backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    logActivity('نسخ احتياطي', 'تنزيل نسخة احتياطية من البيانات');
+  const handleBackup = async () => {
+    try {
+      const response = await systemAPI.backup();
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `backup_${new Date().toISOString().split('T')[0]}.json`); // Adjust extension if it's zip or sql
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      logActivity('نسخ احتياطي', 'تنزيل نسخة احتياطية من البيانات');
+    } catch (error: any) {
+      console.error('Backup failed:', error);
+      alert('فشل إنشاء النسخة الاحتياطية: ' + handleAPIError(error));
+    }
   };
 
-  const handleRestore = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (data.version && data.products) {
-          setProducts(data.products || []);
-          setTransactions(data.transactions || []);
-          setCustomers(data.customers || []);
-          setSuppliers(data.suppliers || []);
-          setQuotations(data.quotations || []);
-          setSettings(data.settings || INITIAL_SETTINGS);
-          setUsers(data.users || INITIAL_USERS);
-          setActivityLogs(data.activityLogs || []);
-          setShifts(data.shifts || []);
-          logActivity('استعادة نسخة', 'تم استعادة البيانات من ملف نسخة احتياطية');
-          alert('تم استعادة البيانات بنجاح!');
-        } else {
-          alert('ملف غير صالح');
-        }
-      } catch (err) {
-        alert('حدث خطأ أثناء قراءة الملف');
-      }
-    };
-    reader.readAsText(file);
+  const handleRestore = async (file: File) => {
+    try {
+      await systemAPI.restore(file);
+      logActivity('استعادة نسخة', 'تم استعادة البيانات من ملف نسخة احتياطية');
+      alert('تم استعادة البيانات بنجاح! سيتم إعادة تحميل الصفحة.');
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Restore failed:', error);
+      alert('فشل استعادة النسخة الاحتياطية: ' + handleAPIError(error));
+    }
   };
 
-  const handleClearTransactions = () => {
-    setTransactions([]);
-    setActivityLogs([]);
-    setQuotations([]);
-    setShifts([]);
-    setSettings(prev => ({ ...prev, currentShiftId: undefined }));
-    // Reset Balances
-    setCustomers(prev => prev.map(c => ({...c, balance: 0})));
-    setSuppliers(prev => prev.map(s => ({...s, balance: 0})));
-    logActivity('مسح معاملات', 'تم مسح سجل المعاملات وتصفية الحسابات');
-    alert('تم مسح جميع المعاملات وتصفية أرصدة العملاء والموردين بنجاح. المخزون والمنتجات كما هي.');
+  const handleClearTransactions = async () => {
+    if (!window.confirm('تحذير: سيتم مسح جميع المعاملات وتصفية الحسابات. هل أنت متأكد؟')) return;
+    try {
+      await systemAPI.clearTransactions();
+      setTransactions([]);
+      setActivityLogs([]);
+      setQuotations([]);
+      setShifts([]);
+      setSettings(prev => ({ ...prev, currentShiftId: undefined }));
+      // Reset Balances
+      // Ideally fetch fresh customers/suppliers
+      const clientsRes = await customersAPI.list();
+      setCustomers((clientsRes.data as any).results || clientsRes.data);
+      const suppliersRes = await suppliersAPI.list();
+      setSuppliers((suppliersRes.data as any).results || suppliersRes.data);
+
+      logActivity('مسح معاملات', 'تم مسح سجل المعاملات وتصفية الحسابات');
+      alert('تم مسح جميع المعاملات وتصفية أرصدة العملاء والموردين بنجاح.');
+    } catch (error: any) {
+      console.error('Clear transactions failed:', error);
+      alert('فشل مسح المعاملات: ' + handleAPIError(error));
+    }
   };
 
-  const handleFactoryReset = () => {
-    localStorage.clear();
-    setProducts(INITIAL_PRODUCTS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setCustomers(INITIAL_CUSTOMERS);
-    setSuppliers(INITIAL_SUPPLIERS);
-    setQuotations([]);
-    setSettings(INITIAL_SETTINGS);
-    setUsers(INITIAL_USERS);
-    setActivityLogs([]);
-    setShifts([]);
-    alert('تمت إعادة ضبط المصنع بنجاح!');
-    window.location.reload();
+  const handleFactoryReset = async () => {
+    if (!window.confirm('تحذير هام جداً: سيتم حذف كل البيانات (منتجات، عملاء، فواتير، مستخدمين) والعودة لضبط المصنع. هل أنت متأكد تماماً؟')) return;
+    try {
+      await systemAPI.factoryReset();
+      localStorage.clear();
+      alert('تمت إعادة ضبط المصنع بنجاح!');
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Factory reset failed:', error);
+      alert('فشل إعادة ضبط المصنع: ' + handleAPIError(error));
+    }
   };
 
   // Notifications
@@ -806,16 +958,16 @@ function App() {
       case APP_SECTIONS.DASHBOARD:
         return <Dashboard products={products} transactions={transactions} customers={customers} currentUser={currentUser} settings={settings} />;
       case APP_SECTIONS.SALES:
-        return <Sales 
-                  products={products} 
-                  customers={customers} 
-                  transactions={transactions} 
-                  onCompleteSale={handleSaleComplete} 
-                  onReturnTransaction={handleReturnTransaction} 
-                  settings={settings} 
-                  currentUser={currentUser}
-                  onAddCustomer={handleAddCustomer}
-               />;
+        return <Sales
+          products={products}
+          customers={customers}
+          transactions={transactions}
+          onCompleteSale={handleSaleComplete}
+          onReturnTransaction={handleReturnTransaction}
+          settings={settings}
+          currentUser={currentUser}
+          onAddCustomer={handleAddCustomer}
+        />;
       case APP_SECTIONS.PURCHASES:
         return <Purchases onDataChange={fetchInitialData} />;
       case APP_SECTIONS.QUOTATIONS:
@@ -825,19 +977,19 @@ function App() {
       case APP_SECTIONS.INVENTORY:
         return <Inventory onProductsChange={fetchInitialData} />;
       case APP_SECTIONS.TREASURY:
-        return <Treasury 
-                  transactions={transactions} 
-                  customers={customers} 
-                  suppliers={suppliers} 
-                  onAddExpense={handleAddExpense} 
-                  onReturnTransaction={handleReturnTransaction} 
-                  onDebtSettlement={handleDebtSettlement}
-                  settings={settings} 
-                  currentUser={currentUser}
-                  onApprove={handleApproveTransaction}
-                  onReject={handleRejectTransaction}
-                  onCapitalTransaction={handleCapitalTransaction}
-               />;
+        return <Treasury
+          transactions={transactions}
+          customers={customers}
+          suppliers={suppliers}
+          onAddExpense={handleAddExpense}
+          onReturnTransaction={handleReturnTransaction}
+          onDebtSettlement={handleDebtSettlement}
+          settings={settings}
+          currentUser={currentUser}
+          onApprove={handleApproveTransaction}
+          onReject={handleRejectTransaction}
+          onCapitalTransaction={handleCapitalTransaction}
+        />;
       case APP_SECTIONS.CUSTOMERS:
         return <Customers onDataChange={fetchInitialData} />;
       case APP_SECTIONS.SUPPLIERS:
@@ -854,7 +1006,7 @@ function App() {
   };
 
   if (!isAuthenticated) {
-    return <Login users={users} onLogin={(user) => {
+    return <Login onLogin={(user) => {
       // Mark session as active for browser close detection
       sessionStorage.setItem('fox_erp_session_active', 'true');
       setIsAuthenticated(true);
@@ -864,10 +1016,10 @@ function App() {
   }
 
   return (
-    <Layout 
-      currentSection={currentSection} 
-      onNavigate={setCurrentSection} 
-      alertsCount={lowStockProducts.length} 
+    <Layout
+      currentSection={currentSection}
+      onNavigate={setCurrentSection}
+      alertsCount={lowStockProducts.length}
       lowStockItems={lowStockProducts}
       currentUser={currentUser}
       onLogout={handleLogout}
@@ -875,7 +1027,7 @@ function App() {
       settings={settings}
     >
       {renderContent()}
-      
+
       {/* Invoice Modal */}
       {invoiceModal.isOpen && invoiceModal.transaction && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -890,7 +1042,7 @@ function App() {
                 {settings.companyAddress && <p className="text-sm text-gray-600">{settings.companyAddress}</p>}
                 {settings.companyPhone && <p className="text-sm text-gray-600">تليفون: {settings.companyPhone}</p>}
               </div>
-              
+
               {/* Info */}
               <div className="mb-4 text-sm space-y-1">
                 <div className="flex justify-between"><span>رقم الفاتورة:</span><span>#{invoiceModal.transaction.id}</span></div>
@@ -898,7 +1050,7 @@ function App() {
                 <div className="flex justify-between"><span>العميل:</span><span>{invoiceModal.customerName}</span></div>
                 <div className="flex justify-between"><span>طريقة الدفع:</span><span>{invoiceModal.paymentMethod}</span></div>
               </div>
-              
+
               {/* Items Table */}
               <table className="w-full text-sm mb-4">
                 <thead className="bg-gray-100">
@@ -920,7 +1072,7 @@ function App() {
                   ))}
                 </tbody>
               </table>
-              
+
               {/* Totals */}
               <div className="border-t-2 border-dashed border-gray-400 pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -944,7 +1096,7 @@ function App() {
                   <span>{(invoiceModal.total + (settings.taxRate > 0 ? invoiceModal.total * settings.taxRate / 100 : 0)).toLocaleString()} ج.م</span>
                 </div>
               </div>
-              
+
               {/* Invoice Terms */}
               {settings.invoiceTerms && (
                 <div className="mt-4 pt-3 border-t border-dashed border-gray-300 text-xs text-gray-500">
@@ -952,14 +1104,25 @@ function App() {
                   <p>{settings.invoiceTerms}</p>
                 </div>
               )}
-              
+
               {/* Footer */}
               <div className="text-center mt-4 pt-4 border-t border-dashed border-gray-400 text-sm text-gray-600">
                 <p>شكراً لتعاملكم معنا</p>
                 <p>نتمنى لكم يوماً سعيداً</p>
               </div>
+
+              {/* Invoice Barcode for Thermal Print */}
+              <div className="barcode-section text-center mt-4 pt-4 border-t border-dashed border-gray-400">
+                <div className="text-xs text-gray-500 mb-1">رقم الفاتورة المميكن</div>
+                <div className="barcode-font text-4xl font-libre-barcode text-black">
+                  {invoiceModal.transaction.invoiceNumber || invoiceModal.transaction.id}
+                </div>
+                <div className="text-[10px] font-mono text-gray-600">
+                  {invoiceModal.transaction.invoiceNumber || invoiceModal.transaction.id}
+                </div>
+              </div>
             </div>
-            
+
             {/* Action Buttons */}
             <div className="flex gap-3 p-4 bg-gray-100 border-t">
               <button

@@ -43,7 +43,22 @@ export const ProductSelector: React.FC<ProductSelectorProps> = ({
               onClick={() => onAddToCart(product)}
               className="bg-dark-900 border border-dark-700 rounded-lg p-3 hover:border-fox-500 transition-all group cursor-pointer"
             >
-              <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                {/* Product Image Thumbnail */}
+                <div className="w-12 h-12 bg-dark-800 rounded-md overflow-hidden flex-shrink-0 border border-dark-700">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-dark-600">
+                      <Package size={16} />
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="font-bold text-white text-sm group-hover:text-fox-400 transition-colors">

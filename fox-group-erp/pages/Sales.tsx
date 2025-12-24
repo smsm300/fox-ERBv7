@@ -11,11 +11,11 @@ interface SalesProps {
   products: Product[];
   customers: Customer[];
   transactions: Transaction[];
-  onCompleteSale: (items: CartItem[], customerId: number, paymentMethod: PaymentMethod, paidAmount: number, invoiceId: string, isDirectSale: boolean, dueDate?: string) => void;
+  onCompleteSale: (items: CartItem[], customerId: number, paymentMethod: PaymentMethod, paidAmount: number, invoiceId: string, isDirectSale: boolean, dueDate?: string, discountAmount?: number) => void;
   onReturnTransaction?: (transaction: Transaction) => void;
   settings: AppSettings;
   currentUser: AppUser;
-  onAddCustomer: (customer: Omit<Customer, 'id'>) => Customer;
+  onAddCustomer: (customer: Omit<Customer, 'id'>) => Promise<Customer>;
 }
 
 const Sales: React.FC<SalesProps> = ({
@@ -30,6 +30,7 @@ const Sales: React.FC<SalesProps> = ({
   const [settings, setSettings] = useState<AppSettings>(initialSettings);
   const [loading, setLoading] = useState(false);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [invoiceDiscount, setInvoiceDiscount] = useState(0);
 
   // Fetch current user's open shift
   useEffect(() => {
@@ -235,9 +236,12 @@ const Sales: React.FC<SalesProps> = ({
   const handleCompleteSale = () => {
     if (cart.length === 0) return;
 
-    const total = cart.reduce((sum, item) =>
+    const subTotal = cart.reduce((sum, item) =>
       sum + ((item.sellPrice - (item.discount || 0)) * item.cartQuantity), 0
     );
+
+    // Apply invoice discount
+    const total = Math.max(0, subTotal - invoiceDiscount);
 
     const invoiceId = `INV-${Date.now()}`;
 
@@ -248,7 +252,8 @@ const Sales: React.FC<SalesProps> = ({
       total,
       invoiceId,
       isDirectSale,
-      paymentMethod === PaymentMethod.DEFERRED ? dueDate : undefined
+      paymentMethod === PaymentMethod.DEFERRED ? dueDate : undefined,
+      invoiceDiscount
     );
 
     // Clear cart
@@ -256,6 +261,7 @@ const Sales: React.FC<SalesProps> = ({
     setSearchTerm('');
     setIsDirectSale(false);
     setDueDate('');
+    setInvoiceDiscount(0);
     searchInputRef.current?.focus();
   };
 
@@ -325,9 +331,12 @@ const Sales: React.FC<SalesProps> = ({
           paymentMethod={paymentMethod}
           isDirectSale={isDirectSale}
           dueDate={dueDate}
+          currentUser={currentUser}
+          invoiceDiscount={invoiceDiscount}
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onOpenDiscountModal={handleOpenDiscountModal}
+          onInvoiceDiscountChange={setInvoiceDiscount}
           onCustomerChange={setSelectedCustomer}
           onPaymentMethodChange={setPaymentMethod}
           onDirectSaleChange={setIsDirectSale}
@@ -439,7 +448,7 @@ const Sales: React.FC<SalesProps> = ({
           </div>
         </div>
       </Modal>
-    </div>
+    </div >
   );
 };
 

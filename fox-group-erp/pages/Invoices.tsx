@@ -56,6 +56,33 @@ const Invoices: React.FC<InvoicesProps> = ({ onDataChange }) => {
     fetchSettings();
   }, []);
 
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Auto-open invoice when barcode matches exactly
+  useEffect(() => {
+    if (searchTerm.length >= 8) {
+      const exactMatch = invoices.find(inv =>
+        (inv.invoiceNumber === searchTerm) ||
+        (inv.id.toString() === searchTerm)
+      );
+
+      if (exactMatch) {
+        setViewingInvoice(exactMatch);
+        setSearchTerm(''); // Clear search for next scan
+      }
+    }
+  }, [searchTerm, invoices]);
+
+  // Global keydown listener to focus search
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+      if (searchInputRef.current) searchInputRef.current.focus();
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   const fetchSettings = async () => {
     try {
       const response = await settingsAPI.get();
@@ -180,109 +207,158 @@ const Invoices: React.FC<InvoicesProps> = ({ onDataChange }) => {
       const price = Number(item.sellPrice || item.buyPrice || item.price || 0);
       return sum + (qty * price);
     }, 0);
-    const discount = subtotal - Number(invoice.amount);
+    const amount = Number(invoice.amount);
 
-    // إيصال حراري بعرض 80mm
     const printContent = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8">
-        <title>إيصال ${isSale ? 'بيع' : 'شراء'}</title>
+        <title>فاتورة - FOX GROUP</title>
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
         <style>
-          @page { 
-            size: 80mm auto; 
-            margin: 0; 
+          @font-face {
+            font-family: 'Libre Barcode 39 Text';
+            src: url('/fonts/librebarcode39text.woff2') format('woff2');
           }
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
-            font-family: 'Courier New', monospace; 
-            width: 80mm; 
-            padding: 5mm; 
+            font-family: 'Cairo', sans-serif; 
+            padding: 20px; 
             font-size: 12px; 
-            background: white;
+            color: #000;
+            background: #fff;
+            width: 80mm;
             line-height: 1.4;
           }
-          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-          .header img { max-width: 50mm; max-height: 15mm; margin-bottom: 5px; }
-          .header h1 { font-size: 16px; font-weight: bold; margin-bottom: 3px; }
-          .header p { font-size: 10px; color: #333; }
-          .invoice-type { text-align: center; font-size: 14px; font-weight: bold; margin: 8px 0; padding: 5px; background: ${isSale ? '#e8f5e9' : '#e3f2fd'}; border-radius: 3px; }
-          .info-row { display: flex; justify-content: space-between; font-size: 11px; margin: 3px 0; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .items-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 11px; padding: 5px 0; border-bottom: 1px solid #ccc; }
-          .item-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px dotted #ddd; }
-          .item-name { flex: 1; }
-          .item-qty { width: 30px; text-align: center; }
-          .item-price { width: 50px; text-align: left; }
-          .totals { margin-top: 8px; }
-          .total-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; }
-          .total-row.discount { color: #9333ea; }
-          .total-row.final { font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 8px; margin-top: 5px; }
-          .payment { text-align: center; margin: 10px 0; padding: 5px; background: #f5f5f5; border-radius: 3px; font-size: 11px; }
-          .footer { text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #000; }
-          .footer p { font-size: 10px; color: #666; margin: 2px 0; }
-          .footer .thanks { font-size: 12px; font-weight: bold; margin-top: 8px; }
-          .barcode { text-align: center; margin: 10px 0; font-family: 'Libre Barcode 39', cursive; font-size: 30px; }
+          .text-center { text-align: center; }
+          .divider { border-top: 1px dashed #9ca3af; margin: 12px 0; }
+          
+          .header-section { margin-bottom: 15px; }
+          .logo-img { height: 50px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto; }
+          .company-title { font-size: 20px; font-weight: 900; margin-bottom: 2px; }
+          .company-info { font-size: 13px; color: #374151; }
+          
+          .info-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
+          .info-label { color: #1f2937; }
+          .info-value { font-weight: 600; }
+          
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { font-weight: 900; font-size: 13px; border-bottom: 1px solid #e5e7eb; padding: 8px 4px; }
+          td { padding: 10px 4px; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+          .col-name { text-align: right; width: 40%; }
+          .col-qty { text-align: center; width: 15%; }
+          .col-price { text-align: center; width: 20%; }
+          .col-total { text-align: left; width: 25%; }
+          
+          .totals-section { space-y: 6px; }
+          .total-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+          .grand-total-row { display: flex; justify-content: space-between; font-size: 19px; font-weight: 900; margin-top: 10px; }
+          
+          .terms-section { font-size: 11px; color: #4b5563; text-align: right; margin-top: 10px; }
+          .terms-title { font-weight: 700; margin-bottom: 4px; color: #374151; }
+          
+          .footer-msg { font-size: 13px; font-weight: 600; color: #374151; margin: 15px 0; }
+          
+          .barcode-wrap { text-align: center; margin-top: 15px; }
+          .barcode-label { font-size: 11px; color: #6b7280; margin-bottom: 5px; }
+          .barcode-main { 
+            font-family: 'Libre Barcode 39 Text'; 
+            font-size: 55px; 
+            line-height: 1;
+            margin: 5px 0;
+          }
+          .barcode-id { font-family: monospace; font-size: 10px; color: #374151; }
+          
           @media print {
-            body { width: 80mm; }
+            body { width: 100%; padding: 5px; }
+            @page { margin: 0; }
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          ${settings?.logoUrl ? `<img src="${settings.logoUrl}" alt="Logo">` : ''}
-          <h1>${settings?.companyName || 'FOX GROUP'}</h1>
-          <p>${settings?.companyPhone || ''}</p>
-          <p>${settings?.companyAddress || ''}</p>
+        <div class="header-section text-center">
+          ${settings?.logoUrl ? `<img src="${settings.logoUrl}" class="logo-img" />` : ''}
+          <div class="company-title">${settings?.companyName || 'FOX GROUP'}</div>
+          <div class="company-info">${settings?.companyAddress || 'القاهرة - مصر'}</div>
+          <div class="company-info">تليفون: ${settings?.companyPhone || '01112223334'}</div>
         </div>
-        
-        <div class="invoice-type">${isSale ? '🧾 إيصال بيع' : '📦 إيصال شراء'}</div>
-        
-        <div class="info-row"><span>رقم الإيصال:</span><span>${invoice.id}</span></div>
-        <div class="info-row"><span>التاريخ:</span><span>${new Date(invoice.date).toLocaleDateString('ar-EG')}</span></div>
-        <div class="info-row"><span>الوقت:</span><span>${new Date(invoice.date).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span></div>
-        ${partyName ? `<div class="info-row"><span>${isSale ? 'العميل:' : 'المورد:'}</span><span>${partyName}</span></div>` : ''}
-        
+
         <div class="divider"></div>
-        
-        <div class="items-header">
-          <span class="item-name">الصنف</span>
-          <span class="item-qty">ك</span>
-          <span class="item-price">السعر</span>
+
+        <div class="info-section">
+          <div class="info-row"><span class="info-value">#${invoice.invoiceNumber || invoice.id}</span><span class="info-label">:رقم الفاتورة</span></div>
+          <div class="info-row"><span class="info-value">${new Date(invoice.date).toLocaleString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true, year: 'numeric', month: '2-digit', day: '2-digit' })}</span><span class="info-label">:التاريخ</span></div>
+          <div class="info-row"><span class="info-value">${partyName || 'عميل نقدي'}</span><span class="info-label">:العميل</span></div>
+          <div class="info-row"><span class="info-value">${invoice.paymentMethod || 'كاش'}</span><span class="info-label">:طريقة الدفع</span></div>
         </div>
-        
-        ${items.map((item: any) => {
+
+        <table>
+          <thead>
+            <tr>
+              <th class="col-name">الصنف</th>
+              <th class="col-qty">الكمية</th>
+              <th class="col-price">السعر</th>
+              <th class="col-total">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item: any) => {
       const qty = item.cartQuantity || item.quantity || 0;
       const price = Number(item.sellPrice || item.buyPrice || item.price || 0);
       return `
-          <div class="item-row">
-            <span class="item-name">${item.name || item.productName || '-'}</span>
-            <span class="item-qty">${qty}</span>
-            <span class="item-price">${(qty * price).toLocaleString()}</span>
+              <tr>
+                <td class="col-name">${item.name || item.productName || '-'}</td>
+                <td class="col-qty">${qty}</td>
+                <td class="col-price">${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td class="col-total">${(qty * price).toLocaleString(undefined, { minimumFractionDigits: 0 })}</td>
+              </tr>
+            `}).join('')}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="totals-section">
+          <div class="total-row"><span>${subtotal.toLocaleString()} ج.م</span><span>:المجموع الفرعي</span></div>
+          <div class="grand-total-row"><span>${amount.toLocaleString(undefined, { minimumFractionDigits: 1 })} ج.م</span><span>:الإجمالي</span></div>
+        </div>
+
+        ${settings?.invoiceTerms ? `
+          <div class="divider"></div>
+          <div class="terms-section">
+            <div class="terms-title">:الشروط والأحكام</div>
+            <div>${settings.invoiceTerms}</div>
           </div>
-        `}).join('')}
-        
-        <div class="totals">
-          <div class="total-row"><span>المجموع:</span><span>${subtotal.toLocaleString()} ج.م</span></div>
-          ${discount > 0 ? `<div class="total-row discount"><span>الخصم:</span><span>- ${discount.toLocaleString()} ج.م</span></div>` : ''}
-          <div class="total-row final"><span>الإجمالي:</span><span>${Number(invoice.amount).toLocaleString()} ج.م</span></div>
+        ` : ''}
+
+        <div class="divider"></div>
+
+        <div class="footer-msg text-center">
+          <div>شكراً لتعاملكم معنا</div>
+          <div>نتمنى لكم يوماً سعيداً</div>
         </div>
-        
-        <div class="payment">💳 ${invoice.paymentMethod || 'نقدي'}</div>
-        
-        <div class="footer">
-          ${settings?.invoiceTerms ? `<p>${settings.invoiceTerms}</p>` : ''}
-          <p class="thanks">شكراً لتعاملكم معنا ❤️</p>
-          <p>نتمنى لكم يوماً سعيداً</p>
+
+        <div class="divider"></div>
+
+        <div class="barcode-wrap">
+          <div class="barcode-label">رقم الفاتورة المميكن</div>
+          <div class="barcode-main">${invoice.invoiceNumber || invoice.id}</div>
+          <div class="barcode-id">${invoice.invoiceNumber || invoice.id}</div>
         </div>
-        
-        <script>window.onload = function() { window.print(); }</script>
       </body>
+      <script>
+        window.onload = function() { 
+          setTimeout(() => {
+            window.print(); 
+            window.close(); 
+          }, 500); 
+        }
+      </script>
       </html>
     `;
 
-    const printWindow = window.open('', '_blank', 'width=320,height=600');
+    const printWindow = window.open('', '_blank', 'width=450,height=700');
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
@@ -324,8 +400,9 @@ const Invoices: React.FC<InvoicesProps> = ({ onDataChange }) => {
           <div className="relative flex-1">
             <Search className="absolute right-3 top-2.5 text-gray-500" size={20} />
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="بحث برقم الفاتورة أو اسم العميل/المورد..."
+              placeholder="بحث برقم الفاتورة أو امسح الباركود..."
               className="w-full bg-dark-900 border border-dark-700 text-white pr-10 pl-4 py-2 rounded-lg focus:border-fox-500 outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -431,8 +508,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onDataChange }) => {
                       <td className="p-3 font-mono text-fox-400">{invoice.id}</td>
                       <td className="p-3">
                         <span className={`px-2 py-1 rounded text-xs ${isSale
-                            ? 'bg-emerald-900/30 text-emerald-400'
-                            : 'bg-blue-900/30 text-blue-400'
+                          ? 'bg-emerald-900/30 text-emerald-400'
+                          : 'bg-blue-900/30 text-blue-400'
                           }`}>
                           {isSale ? 'بيع' : 'شراء'}
                         </span>

@@ -28,21 +28,21 @@ interface TreasuryProps {
   onDataChange?: () => void;
 }
 
-const Treasury: React.FC<TreasuryProps> = ({ 
-  transactions, 
-  customers, 
-  suppliers, 
-  onAddExpense, 
-  settings, 
-  currentUser, 
-  onApprove, 
-  onReject, 
+const Treasury: React.FC<TreasuryProps> = ({
+  transactions,
+  customers,
+  suppliers,
+  onAddExpense,
+  settings,
+  currentUser,
+  onApprove,
+  onReject,
   onCapitalTransaction,
   onDataChange
 }) => {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   // Filter State - Default to last month
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
@@ -51,20 +51,20 @@ const Treasury: React.FC<TreasuryProps> = ({
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  
+
   // Details Modal
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  
+
   // Sorting
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Expense Modal
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({ 
-    amount: '', 
-    description: '', 
-    category: 'مصروفات تشغيلية' 
+  const [expenseForm, setExpenseForm] = useState({
+    amount: '',
+    description: '',
+    category: 'مصروفات تشغيلية'
   });
 
   // Capital Modal
@@ -106,13 +106,13 @@ const Treasury: React.FC<TreasuryProps> = ({
   // Sort icon component
   const SortIcon = ({ field }: { field: SortField }) => (
     <span className="inline-flex flex-col ml-1">
-      <ChevronUp 
-        size={12} 
-        className={`-mb-1 ${sortField === field && sortDirection === 'asc' ? 'text-fox-400' : 'text-gray-600'}`} 
+      <ChevronUp
+        size={12}
+        className={`-mb-1 ${sortField === field && sortDirection === 'asc' ? 'text-fox-400' : 'text-gray-600'}`}
       />
-      <ChevronDown 
-        size={12} 
-        className={`${sortField === field && sortDirection === 'desc' ? 'text-fox-400' : 'text-gray-600'}`} 
+      <ChevronDown
+        size={12}
+        className={`${sortField === field && sortDirection === 'desc' ? 'text-fox-400' : 'text-gray-600'}`}
       />
     </span>
   );
@@ -226,7 +226,7 @@ const Treasury: React.FC<TreasuryProps> = ({
           <div className="text-center md:text-right">
             <p className="text-gray-400 text-sm mb-1">رصيد الخزينة الحالي</p>
             <h1 className="text-4xl font-bold text-white mb-2">
-              {balance.toLocaleString()} <span className="text-xl text-gray-500">ج.م</span>
+              {Number(balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span className="text-xl text-gray-500">ج.م</span>
             </h1>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-emerald-400">
@@ -286,7 +286,7 @@ const Treasury: React.FC<TreasuryProps> = ({
       <div className="bg-dark-950 rounded-xl border border-dark-800 p-4">
         <div className="flex flex-wrap items-center gap-4">
           <Filter size={20} className="text-gray-500" />
-          
+
           {/* Type Filter Dropdown */}
           <div className="relative">
             <select
@@ -305,7 +305,7 @@ const Treasury: React.FC<TreasuryProps> = ({
             </select>
             <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
           </div>
-          
+
           <input
             type="date"
             value={startDate}
@@ -338,7 +338,7 @@ const Treasury: React.FC<TreasuryProps> = ({
           <h2 className="text-xl font-bold text-white">سجل المعاملات</h2>
           <span className="text-sm text-gray-400">عدد النتائج: {filteredAndSortedTransactions.length}</span>
         </div>
-        
+
         {/* Sortable Table Headers */}
         <div className="overflow-x-auto">
           <table className="w-full text-right text-sm">
@@ -367,7 +367,7 @@ const Treasury: React.FC<TreasuryProps> = ({
             </thead>
           </table>
         </div>
-        
+
         <TransactionsList
           transactions={filteredAndSortedTransactions}
           currentUser={currentUser}
@@ -425,12 +425,12 @@ const Treasury: React.FC<TreasuryProps> = ({
                 <p className="text-gray-400 text-sm">النوع</p>
                 <p className="text-white">{
                   selectedTransaction.type === TransactionType.SALE ? 'مبيعات' :
-                  selectedTransaction.type === TransactionType.PURCHASE ? 'مشتريات' :
-                  selectedTransaction.type === TransactionType.EXPENSE ? 'مصروف' :
-                  selectedTransaction.type === TransactionType.RETURN ? 'مرتجع' :
-                  selectedTransaction.type === TransactionType.CAPITAL ? 'رأس مال' :
-                  selectedTransaction.type === TransactionType.WITHDRAWAL ? 'سحب' :
-                  selectedTransaction.type === TransactionType.ADJUSTMENT ? 'تسوية' : selectedTransaction.type
+                    selectedTransaction.type === TransactionType.PURCHASE ? 'مشتريات' :
+                      selectedTransaction.type === TransactionType.EXPENSE ? 'مصروف' :
+                        selectedTransaction.type === TransactionType.RETURN ? 'مرتجع' :
+                          selectedTransaction.type === TransactionType.CAPITAL ? 'رأس مال' :
+                            selectedTransaction.type === TransactionType.WITHDRAWAL ? 'سحب' :
+                              selectedTransaction.type === TransactionType.ADJUSTMENT ? 'تسوية' : selectedTransaction.type
                 }</p>
               </div>
               <div>
@@ -443,18 +443,17 @@ const Treasury: React.FC<TreasuryProps> = ({
               </div>
               <div>
                 <p className="text-gray-400 text-sm">الحالة</p>
-                <p className={`font-bold ${
-                  selectedTransaction.status === 'completed' ? 'text-emerald-400' :
+                <p className={`font-bold ${selectedTransaction.status === 'completed' ? 'text-emerald-400' :
                   selectedTransaction.status === 'pending' ? 'text-yellow-400' :
-                  selectedTransaction.status === 'rejected' ? 'text-red-400' : 'text-gray-400'
-                }`}>
+                    selectedTransaction.status === 'rejected' ? 'text-red-400' : 'text-gray-400'
+                  }`}>
                   {selectedTransaction.status === 'completed' ? 'مكتمل' :
-                   selectedTransaction.status === 'pending' ? 'معلق' :
-                   selectedTransaction.status === 'rejected' ? 'مرفوض' : selectedTransaction.status}
+                    selectedTransaction.status === 'pending' ? 'معلق' :
+                      selectedTransaction.status === 'rejected' ? 'مرفوض' : selectedTransaction.status}
                 </p>
               </div>
             </div>
-            
+
             <div>
               <p className="text-gray-400 text-sm">الوصف</p>
               <p className="text-white">{selectedTransaction.description || '-'}</p>

@@ -87,6 +87,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     onFormChange('sku', sku);
   };
 
+  // Generate Barcode automatically (Numeric 12-digit)
+  const generateBarcode = () => {
+    const random = Math.floor(Math.random() * 900000000000) + 100000000000;
+    onFormChange('barcode', random.toString());
+  };
+
   // Handle file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,13 +181,24 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">باركود (Barcode)</label>
-              <input
-                type="text"
-                value={formData.barcode || ''}
-                onChange={(e) => onFormChange('barcode', e.target.value)}
-                className="w-full bg-dark-900 border border-dark-700 text-white px-3 py-2 rounded-lg focus:border-fox-500 outline-none"
-                placeholder="امسح الباركود هنا..."
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.barcode || ''}
+                  onChange={(e) => onFormChange('barcode', e.target.value)}
+                  className="flex-1 bg-dark-900 border border-dark-700 text-white px-3 py-2 rounded-lg focus:border-fox-500 outline-none"
+                  placeholder="امسح الباركود أو اضغط توليد"
+                />
+                <button
+                  type="button"
+                  onClick={generateBarcode}
+                  className="px-3 py-2 bg-fox-500/20 text-fox-400 rounded-lg hover:bg-fox-500/30 flex items-center gap-1"
+                  title="توليد باركود تلقائي"
+                >
+                  <RefreshCw size={16} />
+                  توليد
+                </button>
+              </div>
             </div>
 
 
@@ -358,8 +375,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 type="button"
                 onClick={() => setImageMode('url')}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-2 ${imageMode === 'url'
-                    ? 'bg-fox-500 text-white'
-                    : 'bg-dark-900 text-gray-400 border border-dark-700 hover:bg-dark-800'
+                  ? 'bg-fox-500 text-white'
+                  : 'bg-dark-900 text-gray-400 border border-dark-700 hover:bg-dark-800'
                   }`}
               >
                 <Link size={16} />
@@ -369,8 +386,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 type="button"
                 onClick={() => setImageMode('upload')}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-2 ${imageMode === 'upload'
-                    ? 'bg-fox-500 text-white'
-                    : 'bg-dark-900 text-gray-400 border border-dark-700 hover:bg-dark-800'
+                  ? 'bg-fox-500 text-white'
+                  : 'bg-dark-900 text-gray-400 border border-dark-700 hover:bg-dark-800'
                   }`}
               >
                 <Upload size={16} />
